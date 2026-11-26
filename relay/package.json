@@ -1,0 +1,11 @@
+{
+  "name": "dead-decibel-relay",
+  "version": "1.0.0",
+  "description": "Zero-dependency WebSocket Co-op & 3D Proximity Voice Relay for DEAD DECIBEL (Bun & Node.js compatible)",
+  "type": "module",
+  "main": "server.mjs",
+  "scripts": {
+    "start": "node server.mjs",
+    "start:bun": "bun server.mjs"
+  }
+}

@@ -1,0 +1,24 @@
+# Release artifacts, keystores, and Play Store screenshots
+builds/
+*.keystore
+*.jks
+*.aab
+*.apk
+*.idsig
+
+# Godot local secrets, import cache, and Android Gradle build
+game/export_presets.cfg
+game/.godot/
+game/android/build/
+
+# Agent / session / tool artifacts
+.opencode/
+opencode.json
+ses_*.json
+new-session*.json
+
+# OS, logs, and Node dependencies
+.DS_Store
+._*
+*.log
+node_modules/

@@ -1,0 +1,56 @@
+; Engine configuration file.
+; It's best edited using the editor UI and not directly,
+; since the parameters that go here are not all obvious.
+
+config_version=5
+
+[application]
+
+config/name="DEAD DECIBEL"
+config/name_localized={
+"en": "DEAD DECIBEL",
+"ru": "МЁРТВЫЙ ДЕЦИБЕЛ"
+}
+config/description="DEAD DECIBEL — 1–4 player co-op & solo 3D acoustic stealth horror in Soviet bio-institute NII-07. Watch your noise, hold your breath, solve locks, and escape Listener-07."
+config/version="4.1.0"
+run/main_scene="res://scenes/main.tscn"
+config/features=PackedStringArray("4.7", "GL Compatibility")
+boot_splash/bg_color=Color(0.031, 0.031, 0.039, 1)
+boot_splash/show_image=false
+config/icon="res://assets/icons/app_icon_512.png"
+
+[audio]
+
+driver/enable_input=true
+buses/default_bus_layout=""
+
+[autoload]
+
+Loc="*res://scripts/autoload/loc.gd"
+SaveState="*res://scripts/autoload/save_state.gd"
+SynthAudio="*res://scripts/autoload/synth_audio.gd"
+AcousticBus="*res://scripts/autoload/acoustic_bus.gd"
+NetRelay="*res://scripts/autoload/net_relay.gd"
+
+[display]
+
+window/size/viewport_width=1280
+window/size/viewport_height=720
+window/size/mode=0
+window/stretch/mode="canvas_items"
+window/stretch/aspect="expand"
+window/handheld/orientation=6
+
+[input_devices]
+
+pointing/emulate_touch_from_mouse=false
+pointing/emulate_mouse_from_touch=false
+sensors/enable_gyroscope=true
+
+[rendering]
+
+renderer/rendering_method="gl_compatibility"
+renderer/rendering_method.mobile="gl_compatibility"
+textures/vram_compression/import_etc2_astc=true
+environment/defaults/default_clear_color=Color(0.025, 0.027, 0.032, 1)
+anti_aliasing/quality/msaa_3d=1

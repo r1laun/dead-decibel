@@ -1,0 +1,532 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>DEAD DECIBEL / МЁРТВЫЙ ДЕЦИБЕЛ — Privacy Policy / Политика конфиденциальности</title>
+  <meta name="description" content="Official Privacy Policy for DEAD DECIBEL (МЁРТВЫЙ ДЕЦИБЕЛ), an acoustic survival horror game for Android and desktop. Real-time RAM-only microphone processing, zero storage, no accounts.">
+  <meta name="theme-color" content="#0a0c0b">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans:wght@400;600&family=Oswald:wght@600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --ink: #0a0c0b;
+      --panel: #111513;
+      --panel-hi: #1a201d;
+      --rule: rgba(217, 210, 193, 0.14);
+      --rule-strong: rgba(217, 210, 193, 0.28);
+      --paper: #ddd6c4;
+      --paper-dim: #9c978a;
+      --paper-mute: #625f57;
+      --sodium: #e3a23b;
+      --signal: #cc3a2e;
+      --phosphor: #8edc9e;
+      --cold: #7fb8c8;
+      --wall-teal: #2e4743;
+      --font-display: 'Oswald', 'Arial Narrow', Impact, sans-serif;
+      --font-body: 'IBM Plex Sans', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+      --font-mono: 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      margin: 0;
+      background-color: var(--ink);
+      background-image:
+        radial-gradient(circle at 82% 8%, rgba(46, 71, 67, 0.20) 0%, transparent 45%),
+        radial-gradient(circle at 12% 72%, rgba(227, 162, 59, 0.06) 0%, transparent 40%),
+        repeating-linear-gradient(
+          0deg,
+          rgba(255, 255, 255, 0.012) 0px,
+          rgba(255, 255, 255, 0.012) 1px,
+          transparent 1px,
+          transparent 4px
+        );
+      color: var(--paper);
+      font-family: var(--font-body);
+      font-size: 16px;
+      line-height: 1.62;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    a {
+      color: var(--sodium);
+      text-decoration: none;
+      border-bottom: 1px solid rgba(227, 162, 59, 0.35);
+      transition: color 0.15s ease, border-color 0.15s ease;
+    }
+    a:hover, a:focus-visible {
+      color: var(--paper);
+      border-bottom-color: var(--paper);
+      outline: none;
+    }
+
+    .wrap {
+      max-width: 920px;
+      margin: 0 auto;
+      padding: 36px 20px 64px;
+    }
+
+    /* Instrument Frame & Corner Registration Brackets */
+    .instrument {
+      position: relative;
+      background: rgba(17, 21, 19, 0.94);
+      border: 1px solid var(--rule);
+      border-radius: 2px;
+      padding: 28px 28px 26px;
+      margin-bottom: 24px;
+    }
+
+    .instrument::before,
+    .instrument::after,
+    .corner-br::before,
+    .corner-br::after {
+      content: "";
+      position: absolute;
+      width: 10px;
+      height: 10px;
+      pointer-events: none;
+    }
+    .instrument::before {
+      top: -1px; left: -1px;
+      border-top: 2px solid var(--sodium);
+      border-left: 2px solid var(--sodium);
+    }
+    .instrument::after {
+      top: -1px; right: -1px;
+      border-top: 2px solid var(--sodium);
+      border-right: 2px solid var(--sodium);
+    }
+    .corner-br::before {
+      bottom: -1px; left: -1px;
+      border-bottom: 2px solid var(--sodium);
+      border-left: 2px solid var(--sodium);
+    }
+    .corner-br::after {
+      bottom: -1px; right: -1px;
+      border-bottom: 2px solid var(--sodium);
+      border-right: 2px solid var(--sodium);
+    }
+
+    /* Top Header */
+    .topbar {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: space-between;
+      align-items: flex-end;
+      gap: 16px;
+      padding-bottom: 20px;
+      margin-bottom: 24px;
+      border-bottom: 1px solid var(--rule);
+    }
+
+    .brand h1 {
+      margin: 0;
+      font-family: var(--font-display);
+      font-weight: 700;
+      font-size: clamp(2rem, 4.6vw, 3.1rem);
+      line-height: 1.0;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      color: var(--paper);
+    }
+    .brand h1 .accent {
+      color: var(--sodium);
+    }
+    .brand-ru {
+      margin-top: 6px;
+      font-family: var(--font-display);
+      font-weight: 600;
+      font-size: 1.15rem;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--paper-dim);
+    }
+    .rule-red {
+      width: 128px;
+      height: 3px;
+      background: var(--signal);
+      margin: 12px 0 10px;
+    }
+    .meta-mono {
+      font-family: var(--font-mono);
+      font-size: 0.82rem;
+      color: var(--phosphor);
+      letter-spacing: 0.03em;
+    }
+
+    .nav-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
+    }
+    .btn {
+      display: inline-block;
+      font-family: var(--font-mono);
+      font-size: 0.84rem;
+      font-weight: 600;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      padding: 9px 14px;
+      background: var(--panel-hi);
+      color: var(--paper);
+      border: 1px solid var(--rule-strong);
+      border-radius: 2px;
+    }
+    .btn:hover, .btn:focus-visible {
+      background: #232b27;
+      border-color: var(--sodium);
+      color: var(--sodium);
+    }
+    .btn-primary {
+      border-color: var(--sodium);
+      color: var(--sodium);
+    }
+
+    /* Quick Telemetry Summary Strip */
+    .telemetry-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(195px, 1fr));
+      gap: 12px;
+      margin-bottom: 24px;
+    }
+    .metric-cell {
+      background: var(--panel);
+      border: 1px solid var(--rule);
+      border-radius: 2px;
+      padding: 14px 16px;
+    }
+    .metric-label {
+      font-family: var(--font-mono);
+      font-size: 0.74rem;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--paper-dim);
+      margin-bottom: 4px;
+    }
+    .metric-val {
+      font-family: var(--font-mono);
+      font-size: 0.96rem;
+      font-weight: 600;
+      color: var(--phosphor);
+    }
+    .metric-val.amber { color: var(--sodium); }
+    .metric-val.cold { color: var(--cold); }
+
+    /* Policy Headings & Body */
+    .section-head {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: space-between;
+      align-items: baseline;
+      gap: 10px;
+      border-bottom: 1px solid var(--rule);
+      padding-bottom: 12px;
+      margin-bottom: 18px;
+    }
+    .section-head h2 {
+      margin: 0;
+      font-family: var(--font-display);
+      font-weight: 700;
+      font-size: 1.55rem;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      color: var(--sodium);
+    }
+    .lang-tag {
+      font-family: var(--font-mono);
+      font-size: 0.78rem;
+      color: var(--cold);
+      border: 1px solid rgba(127, 184, 200, 0.35);
+      padding: 2px 8px;
+      border-radius: 2px;
+    }
+
+    h3 {
+      margin: 20px 0 8px;
+      font-family: var(--font-display);
+      font-weight: 600;
+      font-size: 1.12rem;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      color: var(--paper);
+    }
+
+    p {
+      margin: 0 0 12px;
+      color: var(--paper);
+    }
+
+    ul {
+      margin: 8px 0 14px;
+      padding-left: 20px;
+    }
+    li {
+      margin-bottom: 8px;
+      color: var(--paper);
+    }
+    strong { color: #f1ecdf; }
+
+    code {
+      font-family: var(--font-mono);
+      font-size: 0.88em;
+      color: var(--phosphor);
+      background: rgba(10, 12, 11, 0.75);
+      border: 1px solid var(--rule);
+      padding: 1px 6px;
+      border-radius: 2px;
+    }
+
+    .perm-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 12px 0 16px;
+      font-size: 0.93rem;
+    }
+    .perm-table th,
+    .perm-table td {
+      text-align: left;
+      padding: 10px 12px;
+      border-bottom: 1px solid var(--rule);
+      vertical-align: top;
+    }
+    .perm-table th {
+      font-family: var(--font-mono);
+      font-size: 0.78rem;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--paper-dim);
+      background: rgba(26, 32, 29, 0.55);
+    }
+
+    .notice-box {
+      border-left: 3px solid var(--signal);
+      background: rgba(204, 58, 46, 0.07);
+      padding: 12px 16px;
+      margin: 16px 0 8px;
+    }
+
+    footer {
+      margin-top: 28px;
+      padding-top: 18px;
+      border-top: 1px solid var(--rule);
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: space-between;
+      gap: 12px;
+      font-family: var(--font-mono);
+      font-size: 0.8rem;
+      color: var(--paper-dim);
+    }
+
+    @media (max-width: 640px) {
+      .wrap { padding: 20px 14px 44px; }
+      .instrument { padding: 20px 16px; }
+      .perm-table, .perm-table thead, .perm-table tbody, .perm-table th, .perm-table td, .perm-table tr {
+        display: block;
+      }
+      .perm-table thead { display: none; }
+      .perm-table tr {
+        border: 1px solid var(--rule);
+        margin-bottom: 10px;
+        padding: 8px;
+        background: rgba(10, 12, 11, 0.45);
+      }
+      .perm-table td {
+        border-bottom: none;
+        padding: 4px 6px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="wrap">
+    <header class="topbar">
+      <div class="brand">
+        <h1>DEAD <span class="accent">DECIBEL</span></h1>
+        <div class="brand-ru">МЁРТВЫЙ ДЕЦИБЕЛ · НИИ-07</div>
+        <div class="rule-red" aria-hidden="true"></div>
+        <div class="meta-mono">PKG: com.r1laun.deaddecibel &nbsp;·&nbsp; POLICY REV: 2026-11-26 &nbsp;·&nbsp; v4.1.0</div>
+      </div>
+      <nav class="nav-actions" aria-label="Language and repository links">
+        <a class="btn btn-primary" href="#en">English (EN)</a>
+        <a class="btn" href="#ru">Русский (RU)</a>
+        <a class="btn" href="https://github.com/r1laun/dead-decibel" rel="noopener">GitHub Repo</a>
+      </nav>
+    </header>
+
+    <section class="telemetry-grid" aria-label="Privacy guarantees">
+      <div class="metric-cell">
+        <div class="metric-label">Voice &amp; Mic Pipeline</div>
+        <div class="metric-val">RAM-ONLY / 8 kHz PCM</div>
+      </div>
+      <div class="metric-cell">
+        <div class="metric-label">Audio Recording / Logs</div>
+        <div class="metric-val">ZERO PERSISTENT STORAGE</div>
+      </div>
+      <div class="metric-cell">
+        <div class="metric-label">Accounts &amp; Analytics</div>
+        <div class="metric-val amber">NONE / NO TRACKING SDK</div>
+      </div>
+      <div class="metric-cell">
+        <div class="metric-label">Profile &amp; Settings</div>
+        <div class="metric-val cold">LOCAL DEVICE ONLY</div>
+      </div>
+    </section>
+
+    <!-- ENGLISH POLICY -->
+    <article id="en" class="instrument">
+      <span class="corner-br" aria-hidden="true"></span>
+      <div class="section-head">
+        <h2>Privacy Policy</h2>
+        <span class="lang-tag">EN · GOOGLE PLAY &amp; DESKTOP</span>
+      </div>
+
+      <p>
+        This Privacy Policy explains how <strong>DEAD DECIBEL</strong> (Russian title: <strong>МЁРТВЫЙ ДЕЦИБЕЛ</strong>, Android package <code>com.r1laun.deaddecibel</code>) handles device permissions, audio input, local save data, and optional co-op networking.
+      </p>
+
+      <h3>1. Microphone Access (<code>android.permission.RECORD_AUDIO</code>)</h3>
+      <p>
+        <strong>DEAD DECIBEL</strong> requests microphone permission strictly for real-time gameplay features during active sessions:
+      </p>
+      <ul>
+        <li><strong>Acoustic Stealth Detection:</strong> The game measures real-time microphone volume (with automatic ambient noise-floor calibration) inside your device's volatile RAM so that loud speech or shouting alerts <em>Listener-07</em> in-world.</li>
+        <li><strong>Optional 3D Proximity Voice Radio (Co-op):</strong> When playing in an online co-op room with Microphone Mode set to <em>Auto</em> or <em>Push-to-Talk</em>, short 8 kHz mono audio chunks are streamed exclusively in real time over WebSocket to teammates currently inside your active match room.</li>
+      </ul>
+
+      <div class="notice-box">
+        <strong>Zero Recording &amp; Zero Persistent Storage:</strong> Microphone audio is processed strictly in volatile RAM (0.25-second capture ring buffer). Audio is <strong>never written to device storage, never recorded or logged on any relay server, never used for voice profiling/AI training, and never shared with third parties</strong>. Volatile RAM buffers are wiped immediately when you leave a room, mute the microphone, or close the app.
+      </div>
+
+      <h3>2. Other Android Permissions</h3>
+      <table class="perm-table">
+        <thead>
+          <tr>
+            <th>Permission</th>
+            <th>Purpose in DEAD DECIBEL</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>android.permission.RECORD_AUDIO</code></td>
+            <td>Real-time RAM-only acoustic stealth detection and optional 3D proximity co-op voice chat. Can be denied or disabled in-game (<em>Settings → Microphone: Off</em>) without blocking Solo or non-voice Co-op play.</td>
+          </tr>
+          <tr>
+            <td><code>android.permission.INTERNET</code><br><code>android.permission.ACCESS_NETWORK_STATE</code></td>
+            <td>Optional WebSocket multiplayer connection (<code>ws://</code> / <code>wss://</code>) to the co-op relay address configured by the player to sync player positions, world objects, AI state, and live proximity audio.</td>
+          </tr>
+          <tr>
+            <td><code>android.permission.MODIFY_AUDIO_SETTINGS</code></td>
+            <td>Configures the local Godot audio capture bus (<code>MicCapture</code>) and playback levels cleanly alongside device audio hardware.</td>
+          </tr>
+          <tr>
+            <td><code>android.permission.VIBRATE</code></td>
+            <td>Optional tactile haptic feedback during alerts and interactions (toggleable via <em>Settings → Haptics</em>).</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h3>3. No Accounts, No Personal Data, No Third-Party Ads or Analytics</h3>
+      <ul>
+        <li><strong>No Registration:</strong> DEAD DECIBEL requires no email address, phone number, password, or third-party account sign-in.</li>
+        <li><strong>No Tracking SDKs:</strong> The app contains zero third-party advertising networks, zero behavioral analytics SDKs, and zero crash-telemetry trackers.</li>
+        <li><strong>Local Storage Only:</strong> Your callsign, language, control/accessibility preferences (such as <em>Reduce Motion</em>), randomly generated session identifier (<code>SRV-xxxxx</code>), and solo escape records are stored solely on your local device (<code>user://dead_decibel_profile.json</code>). Uninstalling the app or clearing app data removes this file completely.</li>
+      </ul>
+
+      <h3>4. Multiplayer Relay Data Handling</h3>
+      <p>
+        During an active co-op session, the lightweight WebSocket relay server holds room codes, member callsigns, and live session state strictly in memory (RAM) for routing between connected players in the same room. Once all players disconnect or a room closes, the room state is discarded from memory. Players may also self-host the open-source relay server from the repository.
+      </p>
+
+      <h3>5. Children's Privacy &amp; Contact</h3>
+      <p>
+        DEAD DECIBEL is a horror survival game intended for mature audiences and does not knowingly collect personal information from children or any user. For questions, bug reports, or privacy inquiries, open an issue in the official repository:
+        <a href="https://github.com/r1laun/dead-decibel/issues" rel="noopener">github.com/r1laun/dead-decibel/issues</a>.
+      </p>
+    </article>
+
+    <!-- RUSSIAN POLICY -->
+    <article id="ru" class="instrument" lang="ru">
+      <span class="corner-br" aria-hidden="true"></span>
+      <div class="section-head">
+        <h2>Политика конфиденциальности</h2>
+        <span class="lang-tag">RU · ВЕРСИЯ НА РУССКОМ</span>
+      </div>
+
+      <p>
+        Настоящая Политика конфиденциальности описывает, как игра <strong>МЁРТВЫЙ ДЕЦИБЕЛ</strong> (английское название: <strong>DEAD DECIBEL</strong>, идентификатор пакета Android: <code>com.r1laun.deaddecibel</code>) использует разрешения устройства, аудиопоток с микрофона, локальные сохранения и сетевой кооператив.
+      </p>
+
+      <h3>1. Доступ к микрофону (<code>android.permission.RECORD_AUDIO</code>)</h3>
+      <p>
+        Игра запрашивает доступ к микрофону исключительно для игровых механик в реальном времени во время активной вылазки:
+      </p>
+      <ul>
+        <li><strong>Акустический стелс:</strong> игра измеряет громкость микрофона в реальном времени (с автоматической калибровкой фонового шума комнаты) строго в оперативной памяти RAM, чтобы <em>Слухач-07</em> мог реагировать на громкую речь или крики игрока.</li>
+        <li><strong>Пространственная голосовая рация (кооператив):</strong> если в настройках выбран режим микрофона <em>Авто</em> или <em>Рация (Push-to-Talk)</em>, короткие моно-пакеты 8 кГц передаются в реальном времени по WebSocket только участникам вашей текущей игровой комнаты.</li>
+      </ul>
+
+      <div class="notice-box">
+        <strong>Отсутствие записи и постоянного хранения:</strong> голосовые данные обрабатываются <strong>исключительно в оперативной памяти (RAM)</strong> (кольцевой буфер 0.25 с). Аудио <strong>никогда не записывается на накопитель устройства, не сохраняется и не логируется на серверах, не используется для обучения моделей и не передаётся третьим лицам</strong>. Буфер в RAM полностью очищается при выходе из комнаты, отключении микрофона или закрытии приложения.
+      </div>
+
+      <h3>2. Остальные разрешения Android</h3>
+      <table class="perm-table">
+        <thead>
+          <tr>
+            <th>Разрешение</th>
+            <th>Назначение в игре</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>android.permission.RECORD_AUDIO</code></td>
+            <td>Акустическая чувствительность и рация в кооперативе (только RAM). Можно отклонить на уровне ОС или выключить в настройках игры (<em>Настройки → Микрофон: Выкл</em>) — одиночный режим и кооператив без голоса продолжат работать.</td>
+          </tr>
+          <tr>
+            <td><code>android.permission.INTERNET</code><br><code>android.permission.ACCESS_NETWORK_STATE</code></td>
+            <td>Подключение по WebSocket (<code>ws://</code> / <code>wss://</code>) к выбранному игроком ретранслятору для синхронизации позиций, предметов, ИИ и живой рации в кооперативе.</td>
+          </tr>
+          <tr>
+            <td><code>android.permission.MODIFY_AUDIO_SETTINGS</code></td>
+            <td>Корректная настройка аудиошины захвата микрофона (<code>MicCapture</code>) и громкости на мобильных устройствах.</td>
+          </tr>
+          <tr>
+            <td><code>android.permission.VIBRATE</code></td>
+            <td>Тактильная виброотдача при тревоге и взаимодействиях (отключается в пункте <em>Настройки → Вибрация</em>).</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h3>3. Без регистрации, рекламы и трекеров</h3>
+      <ul>
+        <li><strong>Без учётных записей:</strong> игра не запрашивает электронную почту, номер телефона, пароль или стороннюю авторизацию.</li>
+        <li><strong>Нет рекламных и аналитических SDK:</strong> в приложении отсутствуют рекламные модули, поведенческая аналитика и сторонние трекеры телеметрии.</li>
+        <li><strong>Только локальное хранение:</strong> ваш позывной, выбранный язык, настройки управления и доступности (включая <em>Снижение движения</em>), случайный локальный ID сессии (<code>SRV-xxxxx</code>) и рекорды побегов хранятся только на вашем устройстве (<code>user://dead_decibel_profile.json</code>) и полностью удаляются при очистке данных или удалении игры.</li>
+      </ul>
+
+      <h3>4. Обработка данных на ретрансляторе кооператива</h3>
+      <p>
+        Во время сетевой кооперативной игры ретранслятор WebSocket хранит коды комнат, позывные участников и состояние текущей игровой сессии исключительно в оперативной памяти (RAM) для маршрутизации между игроками одной комнаты. После выхода всех участников комната удаляется из памяти. Исходный код ретранслятора открыт — вы также можете запускать собственный локальный или сетевой ретранслятор.
+      </p>
+
+      <h3>5. Контакты и обратная связь</h3>
+      <p>
+        По вопросам конфиденциальности, работы разрешений или удаления локальных данных обращайтесь через раздел Issues официального репозитория проекта:
+        <a href="https://github.com/r1laun/dead-decibel/issues" rel="noopener">github.com/r1laun/dead-decibel/issues</a>.
+      </p>
+    </article>
+
+    <footer>
+      <span>НИИ-07 // DEAD DECIBEL · МЁРТВЫЙ ДЕЦИБЕЛ</span>
+      <span><a href="https://github.com/r1laun/dead-decibel" rel="noopener">https://github.com/r1laun/dead-decibel</a></span>
+    </footer>
+  </main>
+</body>
+</html>
