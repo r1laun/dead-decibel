@@ -23,6 +23,8 @@ const MOVE_ACCEL := 18.0
 const MOVE_DECEL := 14.5
 const JOY_DEADZONE_MOVE := 0.18
 const JOY_DEADZONE_LOOK := 0.16
+const TOUCH_WALK_DEADZONE := 0.08
+const TOUCH_SPRINT_THRESHOLD := 0.90
 
 var col_shape: CollisionShape3D
 var capsule: CapsuleShape3D
@@ -785,8 +787,19 @@ func _physics_process(delta: float) -> void:
 	if Input.is_key_pressed(KEY_S) or Input.is_key_pressed(KEY_DOWN):
 		kb.y += 1.0
 
+	var touch_in := Vector2.ZERO
+	var touch_raw_mag := touch_move_vec.length()
+	var touch_sprint_active := false
+	if touch_raw_mag >= TOUCH_WALK_DEADZONE:
+		if touch_raw_mag >= TOUCH_SPRINT_THRESHOLD:
+			touch_in = touch_move_vec.normalized()
+			touch_sprint_active = touch_sprinting
+		else:
+			var walk_scale := clampf((touch_raw_mag - TOUCH_WALK_DEADZONE) / (TOUCH_SPRINT_THRESHOLD - TOUCH_WALK_DEADZONE), 0.0, 1.0)
+			touch_in = touch_move_vec.normalized() * walk_scale
+
 	var joy_move: Vector2 = pad["move"]
-	var move_in := kb + touch_move_vec + joy_move
+	var move_in := kb + touch_in + joy_move
 	if move_in.length() > 1.0:
 		move_in = move_in.normalized()
 
@@ -800,7 +813,7 @@ func _physics_process(delta: float) -> void:
 	var eff_crouch := is_crouching or is_under_desk
 	if eff_crouch or is_downed:
 		_joy_sprint_toggled = false
-	var sprinting := (Input.is_key_pressed(KEY_SHIFT) or touch_sprinting or _joy_sprint_toggled) and not eff_crouch and not is_downed and not is_holding_breath and move_mag > 0.25
+	var sprinting := (Input.is_key_pressed(KEY_SHIFT) or touch_sprint_active or _joy_sprint_toggled) and not eff_crouch and not is_downed and not is_holding_breath and move_mag > 0.25
 
 	var spd := WALK_SPEED
 	if is_downed:

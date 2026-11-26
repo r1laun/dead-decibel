@@ -12,9 +12,14 @@ MODEL_DIR = os.path.join(BASE_GAME, "assets", "models")
 os.makedirs(MODEL_DIR, exist_ok=True)
 
 
-def load_img(filename: str, non_color: bool = False):
+def load_img(filename: str, non_color: bool = False, max_size: int = 0):
     path = os.path.join(TEX_DIR, filename)
     img = bpy.data.images.load(path, check_existing=True)
+    if max_size > 0 and (img.size[0] > max_size or img.size[1] > max_size):
+        w, h = img.size[0], img.size[1]
+        scale = max_size / max(w, h)
+        img.scale(max(1, int(round(w * scale))), max(1, int(round(h * scale))))
+        img.pack()
     if non_color:
         img.colorspace_settings.name = "Non-Color"
     return img
@@ -31,6 +36,7 @@ def make_uv_pbr_mat(
     emission_strength: float = 0.0,
     normal_strength: float = 1.0,
     specular_ior: float = 0.5,
+    max_tex_size: int = 0,
 ):
     mat = bpy.data.materials.new(name=name)
     mat.use_nodes = True
@@ -51,7 +57,7 @@ def make_uv_pbr_mat(
 
     if tex_file:
         ti = nodes.new("ShaderNodeTexImage")
-        ti.image = load_img(tex_file, False)
+        ti.image = load_img(tex_file, False, max_size=max_tex_size)
         if tuple(round(x, 3) for x in base_col[:3]) != (1.0, 1.0, 1.0):
             mix = nodes.new("ShaderNodeMix")
             mix.data_type = "RGBA"
@@ -64,7 +70,7 @@ def make_uv_pbr_mat(
             links.new(ti.outputs["Color"], bsdf.inputs["Base Color"])
         if norm_file:
             ni = nodes.new("ShaderNodeTexImage")
-            ni.image = load_img(norm_file, True)
+            ni.image = load_img(norm_file, True, max_size=max_tex_size)
             nm = nodes.new("ShaderNodeNormalMap")
             nm.inputs["Strength"].default_value = normal_strength
             links.new(ni.outputs["Color"], nm.inputs["Color"])
@@ -88,6 +94,16 @@ def assign_cubic_uvs_bmesh(bm: bmesh.types.BMesh, tex_repeat: float = 2.0, uv_na
             else:
                 u, v = co.x, co.z
             lp[uv_layer].uv = (u * tex_repeat + 0.5, v * tex_repeat + 0.5)
+
+
+def assign_continuous_uvs_bmesh(bm: bmesh.types.BMesh, tex_repeat: float = 2.0, uv_name: str = "UVMap") -> None:
+    """Seam-free continuous projection for thin tubes, chains, fangs, and untextured meshes."""
+    uv_layer = bm.loops.layers.uv.get(uv_name) or bm.loops.layers.uv.new(uv_name)
+    for f in bm.faces:
+        f.smooth = True
+        for lp in f.loops:
+            co = lp.vert.co
+            lp[uv_layer].uv = ((co.x + co.y) * tex_repeat + 0.5, co.z * tex_repeat + 0.5)
 
 
 def apply_modifiers_and_uv(obj, mat, tex_repeat: float = 2.2) -> None:
@@ -147,9 +163,12 @@ def join_with_exact_materials(base_obj, base_mat, detail_items: list, palette: l
     )
 
 
-def create_detail_obj(name: str, bm: bmesh.types.BMesh, tex_repeat: float = 2.0):
+def create_detail_obj(name: str, bm: bmesh.types.BMesh, tex_repeat: float = 2.0, continuous_uv: bool = False):
     m = bpy.data.meshes.new(name + "_mesh")
-    assign_cubic_uvs_bmesh(bm, tex_repeat=tex_repeat, uv_name="UVMap")
+    if continuous_uv:
+        assign_continuous_uvs_bmesh(bm, tex_repeat=tex_repeat, uv_name="UVMap")
+    else:
+        assign_cubic_uvs_bmesh(bm, tex_repeat=tex_repeat, uv_name="UVMap")
     bm.to_mesh(m)
     bm.free()
     m.validate()
@@ -328,6 +347,11 @@ def add_parabolic_ear_cup(
     depth: float = 0.056,
     baffle_rings: int = 3,
     cross_bars: bool = False,
+    ring_steps: int = 20,
+    rib_steps: int = 16,
+    rib_segs: int = 6,
+    needle_segs: int = 8,
+    bar_segs: int = 6,
 ):
     """Build a bolted Soviet acoustic parabolic amplifier dish with concentric baffle ribs."""
     n_dir = out_dir.normalized()
@@ -342,7 +366,6 @@ def add_parabolic_ear_cup(
         (0.65, outer_r * 0.86, outer_r * 0.86),
         (1.0, outer_r, outer_r),
     ]
-    ring_steps = 20
     outer_rings, inner_rings = [], []
     wall = 0.0065
     for pt_t, rx, ry in profile:
@@ -374,17 +397,17 @@ def add_parabolic_ear_cup(
         br = outer_r * (0.38 + bi * 0.20)
         bc = center + n_dir * (bt * depth)
         rib_pts = []
-        for si in range(17):
-            a = (si / 16.0) * math.tau
+        for si in range(rib_steps + 1):
+            a = (si / float(rib_steps)) * math.tau
             rib_pts.append((bc + (u * math.cos(a) + v * math.sin(a)) * br, 0.0032, 0.0042))
-        add_tube_along_points(bm_iron, rib_pts, segs=6, cap_start=False, cap_end=False)
+        add_tube_along_points(bm_iron, rib_pts, segs=rib_segs, cap_start=False, cap_end=False)
 
     # Central acoustic transducer needle cone
     add_tube_along_points(bm_iron, [
         (center + n_dir * 0.005, 0.015, 0.015),
         (center + n_dir * (depth * 0.72), 0.006, 0.006),
         (center + n_dir * (depth * 0.96), 0.0025, 0.0025),
-    ], segs=8)
+    ], segs=needle_segs)
 
     if cross_bars:
         mouth_c = center + n_dir * (depth * 0.94)
@@ -394,7 +417,7 @@ def add_parabolic_ear_cup(
                 (mouth_c - bdir * (outer_r * 0.96), 0.0032, 0.0032),
                 (mouth_c + n_dir * 0.006, 0.0032, 0.0032),
                 (mouth_c + bdir * (outer_r * 0.96), 0.0032, 0.0032),
-            ], segs=6)
+            ], segs=bar_segs)
 
 
 def push_nla_action(arm_obj, action_name: str):
@@ -421,6 +444,7 @@ def build_sculpted_monster() -> None:
         roughness=0.56,
         metallic=0.02,
         normal_strength=1.25,
+        max_tex_size=256,
     )
     mat_iron = make_uv_pbr_mat(
         "SpecimenIron",
@@ -430,6 +454,7 @@ def build_sculpted_monster() -> None:
         roughness=0.44,
         metallic=0.88,
         normal_strength=1.1,
+        max_tex_size=256,
     )
     mat_bone = make_uv_pbr_mat(
         "SpecimenBone",
@@ -463,6 +488,7 @@ def build_sculpted_monster() -> None:
         base_col=(0.032, 0.022, 0.018, 1.0),
         roughness=0.84,
         metallic=0.04,
+        max_tex_size=256,
     )
     mat_rag = make_uv_pbr_mat(
         "SpecimenRag",
@@ -471,6 +497,7 @@ def build_sculpted_monster() -> None:
         base_col=(0.11, 0.022, 0.020, 1.0),
         roughness=0.95,
         metallic=0.0,
+        max_tex_size=256,
     )
     palette = [mat_flesh, mat_iron, mat_bone, mat_glow, mat_maw, mat_strap, mat_rag]
 
@@ -627,6 +654,16 @@ def build_sculpted_monster() -> None:
 
     body_obj.data.update()
 
+    # Cleanly decimate sculpted base body BEFORE sampling sternum & rigging so skin weights remain 100% clean
+    dec_mod = body_obj.modifiers.new(name="MobileDecimate", type="DECIMATE")
+    dec_mod.decimate_type = "COLLAPSE"
+    dec_mod.ratio = 0.36
+    bpy.context.view_layer.objects.active = body_obj
+    body_obj.select_set(True)
+    bpy.ops.object.modifier_apply(modifier=dec_mod.name)
+    body_obj.select_set(False)
+    body_obj.data.validate()
+
     # Sample front sternum surface Y along center chest so incision & surgical staples sit flush
     def sample_chest_front_y(z_target: float) -> float:
         best_y = 0.18
@@ -642,8 +679,8 @@ def build_sculpted_monster() -> None:
     # 3. Build Secondary & Tertiary Sculpted Details with EXACT Material Tagging
     detail_items = []
 
-    def push_part(name: str, bm_part: bmesh.types.BMesh, mat_part, tex_rep: float = 2.0):
-        obj = create_detail_obj(name, bm_part, tex_repeat=tex_rep)
+    def push_part(name: str, bm_part: bmesh.types.BMesh, mat_part, tex_rep: float = 2.0, continuous_uv: bool = False):
+        obj = create_detail_obj(name, bm_part, tex_repeat=tex_rep, continuous_uv=continuous_uv)
         detail_items.append((obj, mat_part))
         return obj
 
@@ -656,8 +693,8 @@ def build_sculpted_monster() -> None:
         cy = 0.068 + ri * 0.007
         for side in (-1, 1):
             rib_pts = []
-            for k in range(8):
-                t = k / 7.0
+            for k in range(6):
+                t = k / 5.0
                 ang = 0.45 + t * 2.02
                 px = side * math.sin(ang) * width
                 py = cy - math.cos(ang) * depth
@@ -666,8 +703,8 @@ def build_sculpted_monster() -> None:
                 end_taper = math.sin(max(0.08, min(0.92, t)) * math.pi)
                 rad = (0.0050 + end_taper * 0.0068)
                 rib_pts.append((Vector((px, py, pz)), rad * 0.72, rad * 1.15))
-            add_tube_along_points(bm_ribs, rib_pts, segs=8)
-    push_part("Ribs", bm_ribs, mat_flesh, 2.4)
+            add_tube_along_points(bm_ribs, rib_pts, segs=5)
+    push_part("Ribs", bm_ribs, mat_flesh, 2.4, continuous_uv=True)
 
     # A2) Protruding Collarbones (Clavicles) & Taut Neck Tendons
     bm_clav = bmesh.new()
@@ -680,8 +717,8 @@ def build_sculpted_monster() -> None:
             (Vector((side * 0.175, 0.145 + asym_y * 0.3, 1.705 + asym_z * 0.5)), 0.012, 0.011),
             (Vector((side * 0.235, 0.112 + asym_y * 0.4, 1.685 + asym_z * 0.7)), 0.014, 0.012),
         ]
-        add_tube_along_points(bm_clav, clav_pts, segs=8)
-    push_part("Clavicles", bm_clav, mat_flesh, 2.4)
+        add_tube_along_points(bm_clav, clav_pts, segs=5)
+    push_part("Clavicles", bm_clav, mat_flesh, 2.4, continuous_uv=True)
 
     bm_tendons = bmesh.new()
     for side in (-1, 1):
@@ -692,26 +729,26 @@ def build_sculpted_monster() -> None:
             (Vector((side * 0.044, 0.214, 1.800)), 0.011, 0.012),
             (Vector((side * 0.022, 0.194, 1.715)), 0.012, 0.011),
         ]
-        add_tube_along_points(bm_tendons, scm_pts, segs=7)
+        add_tube_along_points(bm_tendons, scm_pts, segs=4)
         # Posterior nuchal cord from skull base down to upper scapula/spine
         nuchal_pts = [
             (Vector((side * 0.042, 0.165, 1.975)), 0.013, 0.013),
             (Vector((side * 0.056, 0.135, 1.870)), 0.014, 0.014),
             (Vector((side * 0.072, 0.078, 1.755)), 0.015, 0.014),
         ]
-        add_tube_along_points(bm_tendons, nuchal_pts, segs=7)
-    push_part("NeckTendons", bm_tendons, mat_flesh, 2.4)
+        add_tube_along_points(bm_tendons, nuchal_pts, segs=4)
+    push_part("NeckTendons", bm_tendons, mat_flesh, 2.4, continuous_uv=True)
 
     # A3) Sternal Surgical Incision Seam & 11 Metallic Surgical Staples
     bm_incision = bmesh.new()
     inc_pts = []
-    for k in range(11):
-        iz = 1.39 + (k / 10.0) * 0.29
+    for k in range(8):
+        iz = 1.39 + (k / 7.0) * 0.29
         iy = sample_chest_front_y(iz) + 0.002
         ix = math.sin(k * 1.4) * 0.003
         inc_pts.append((Vector((ix, iy, iz)), 0.007, 0.004))
-    add_tube_along_points(bm_incision, inc_pts, segs=6)
-    push_part("SurgicalIncision", bm_incision, mat_rag, 2.4)
+    add_tube_along_points(bm_incision, inc_pts, segs=4)
+    push_part("SurgicalIncision", bm_incision, mat_rag, 2.4, continuous_uv=True)
 
     bm_staples = bmesh.new()
     for si in range(11):
@@ -725,8 +762,8 @@ def build_sculpted_monster() -> None:
             (Vector((0.015, sy + 0.009, sz + tilt * 0.02)), 0.0026, 0.0026),
             (Vector((0.018, sy - 0.006, sz + tilt * 0.03)), 0.0024, 0.0024),
         ]
-        add_tube_along_points(bm_staples, st_pts, segs=5)
-    push_part("SurgicalStaples", bm_staples, mat_iron, 2.5)
+        add_tube_along_points(bm_staples, st_pts, segs=3)
+    push_part("SurgicalStaples", bm_staples, mat_iron, 2.5, continuous_uv=True)
 
     # B) Protruding Dorsal Spine Vertebrae (9 sharp hunched spinous processes rooted cleanly inside spine)
     bm_spine = bmesh.new()
@@ -739,8 +776,8 @@ def build_sculpted_monster() -> None:
             (Vector((0.0, sy - ln * 0.55, sz - 0.004)), 0.012, 0.016),
             (Vector((0.0, sy - ln, sz - 0.018)), 0.0035, 0.005),
         ]
-        add_tube_along_points(bm_spine, pts, segs=7)
-    push_part("SpineVertebrae", bm_spine, mat_flesh, 2.4)
+        add_tube_along_points(bm_spine, pts, segs=4)
+    push_part("SpineVertebrae", bm_spine, mat_flesh, 2.4, continuous_uv=True)
 
     # C) Longer Multi-Segmented Gnarled Bone Talons on 8 fingers + thumb spurs + toe claws
     bm_talons = bmesh.new()
@@ -762,14 +799,14 @@ def build_sculpted_monster() -> None:
                 (fb + Vector((hook_in * 0.45, 0.044, -0.074)), 0.0065, 0.0075),
                 (fb + Vector((hook_in * 1.15, 0.056, -0.128)), 0.0014, 0.0014),
             ]
-            add_tube_along_points(bm_talons, pts, segs=7)
+            add_tube_along_points(bm_talons, pts, segs=4)
         # Inner gnarled thumb dewclaw talon
         thumb_b = Vector((side * 0.26, 0.28 + asym_y, 0.65 + asym_z))
         add_tube_along_points(bm_talons, [
             (thumb_b, 0.010, 0.010),
             (thumb_b + Vector((-side * 0.024, 0.026, -0.026)), 0.0065, 0.0065),
             (thumb_b + Vector((-side * 0.042, 0.034, -0.068)), 0.0015, 0.0015),
-        ], segs=6)
+        ], segs=4)
         # Hooked toe talons
         for tx in (side * 0.132, side * 0.165, side * 0.195):
             t_base = Vector((tx, 0.18, 0.034))
@@ -777,31 +814,31 @@ def build_sculpted_monster() -> None:
                 (t_base, 0.009, 0.008),
                 (t_base + Vector((0.0, 0.032, 0.004)), 0.006, 0.006),
                 (t_base + Vector((0.0, 0.062, -0.014)), 0.0016, 0.0016),
-            ], segs=6)
-    push_part("Talons", bm_talons, mat_bone, 1.0)
+            ], segs=4)
+    push_part("Talons", bm_talons, mat_bone, 1.0, continuous_uv=True)
 
     # D) Soviet Acoustic-Containment Iron Blind-Visor & Bolted Cranial Cage + Recessed Slit
     head_c = Vector((0.0, 0.275, 2.025))
     bm_cage = bmesh.new()
-    add_curved_visor_band(bm_cage, head_c, 0.115, 0.136, -1.28, 1.28, 2.044, 2.092, 0.017, arc_steps=18)
-    add_curved_visor_band(bm_cage, head_c, 0.115, 0.136, -1.28, 1.28, 1.984, 2.026, 0.017, arc_steps=18)
-    add_curved_visor_band(bm_cage, head_c, 0.106, 0.126, -1.22, 1.22, 2.020, 2.052, 0.010, arc_steps=16)
+    add_curved_visor_band(bm_cage, head_c, 0.115, 0.136, -1.28, 1.28, 2.044, 2.092, 0.017, arc_steps=12)
+    add_curved_visor_band(bm_cage, head_c, 0.115, 0.136, -1.28, 1.28, 1.984, 2.026, 0.017, arc_steps=12)
+    add_curved_visor_band(bm_cage, head_c, 0.106, 0.126, -1.22, 1.22, 2.020, 2.052, 0.010, arc_steps=10)
     # Center iron nose bridge + brow rivets + side hinge plates + temple hex bolts
     add_box_bm(bm_cage, (0.028, 0.024, 0.114), (0.0, 0.422, 2.038))
     for rx in (-0.072, -0.036, 0.036, 0.072):
-        add_cyl_bm(bm_cage, 0.007, 0.007, 0.014, Vector((rx, 0.275 + math.cos(rx * 5.0) * 0.148, 2.072)), Euler((1.57, 0, -rx * 4.0)), segs=6)
+        add_cyl_bm(bm_cage, 0.007, 0.007, 0.014, Vector((rx, 0.275 + math.cos(rx * 5.0) * 0.148, 2.072)), Euler((1.57, 0, -rx * 4.0)), segs=5)
     for side in (-1, 1):
         add_box_bm(bm_cage, (0.024, 0.056, 0.114), (side * 0.124, 0.312, 2.038), Euler((0, 0, side * 0.28)))
         for bz in (2.002, 2.072):
             add_cyl_bm(bm_cage, 0.012, 0.012, 0.026, Vector((side * 0.134, 0.305, bz)), Euler((0, math.pi * 0.5, 0)), segs=6)
     # Crown & occipital skull cage straps (snug against cranium)
-    add_curved_visor_band(bm_cage, Vector((0.0, 0.26, 2.03)), 0.110, 0.128, math.pi * 0.5, math.pi * 1.5, 1.995, 2.040, 0.012, arc_steps=14)
+    add_curved_visor_band(bm_cage, Vector((0.0, 0.26, 2.03)), 0.110, 0.128, math.pi * 0.5, math.pi * 1.5, 1.995, 2.040, 0.012, arc_steps=10)
     crown_pts = []
-    for k in range(11):
-        t = k / 10.0
+    for k in range(7):
+        t = k / 6.0
         a = -0.25 + t * (math.pi + 0.5)
         crown_pts.append((Vector((0.0, 0.262 + math.cos(a) * 0.130, 2.042 + math.sin(a) * 0.138)), 0.012, 0.007))
-    add_tube_along_points(bm_cage, crown_pts, segs=6)
+    add_tube_along_points(bm_cage, crown_pts, segs=4)
     push_part("CranialCage", bm_cage, mat_iron, 2.5)
 
     # Recessed dual sinister crimson-amber sensor slits inside the visor slot
@@ -809,25 +846,31 @@ def build_sculpted_monster() -> None:
     for side in (-1, 1):
         a0 = 0.14 if side == 1 else -0.82
         a1 = 0.82 if side == 1 else -0.14
-        add_curved_visor_band(bm_slit, head_c, 0.112, 0.132, a0, a1, 2.029, 2.041, 0.008, arc_steps=8)
-    push_part("VisorSlit", bm_slit, mat_glow, 1.0)
+        add_curved_visor_band(bm_slit, head_c, 0.112, 0.132, a0, a1, 2.029, 2.041, 0.008, arc_steps=5)
+    push_part("VisorSlit", bm_slit, mat_glow, 1.0, continuous_uv=True)
 
     # D2) Asymmetrical Bolted Soviet Acoustic-Ear Amplifier Cups / Parabolic Listening Plates + Coiled Wires to Collar!
     bm_ears = bmesh.new()
     # Left (-X): Larger flared parabolic acoustic dish angled outward & forward
     l_ear_c = Vector((-0.128, 0.265, 2.026))
     l_ear_dir = Vector((-0.92, 0.36, 0.08))
-    add_parabolic_ear_cup(bm_ears, l_ear_c, l_ear_dir, outer_r=0.080, depth=0.060, baffle_rings=3, cross_bars=False)
+    add_parabolic_ear_cup(
+        bm_ears, l_ear_c, l_ear_dir, outer_r=0.080, depth=0.060,
+        baffle_rings=2, cross_bars=False, ring_steps=12, rib_steps=10, rib_segs=4, needle_segs=5, bar_segs=4,
+    )
     # Clamping bracket & bolts attaching left ear cup to cranial cage
     add_box_bm(bm_ears, (0.032, 0.038, 0.095), (-0.122, 0.278, 2.026), Euler((0, 0, -0.22)))
-    add_cyl_bm(bm_ears, 0.012, 0.012, 0.028, Vector((-0.132, 0.260, 1.960)), Euler((0.2, 0, 0)), segs=8)
+    add_cyl_bm(bm_ears, 0.012, 0.012, 0.028, Vector((-0.132, 0.260, 1.960)), Euler((0.2, 0, 0)), segs=6)
 
     # Right (+X): Asymmetrical smaller, higher-mounted acoustic horn plate with protective cross-bars!
     r_ear_c = Vector((0.124, 0.254, 2.044))
     r_ear_dir = Vector((0.90, 0.40, -0.06))
-    add_parabolic_ear_cup(bm_ears, r_ear_c, r_ear_dir, outer_r=0.066, depth=0.052, baffle_rings=2, cross_bars=True)
+    add_parabolic_ear_cup(
+        bm_ears, r_ear_c, r_ear_dir, outer_r=0.066, depth=0.052,
+        baffle_rings=1, cross_bars=True, ring_steps=12, rib_steps=10, rib_segs=4, needle_segs=5, bar_segs=4,
+    )
     add_box_bm(bm_ears, (0.030, 0.034, 0.088), (0.118, 0.270, 2.040), Euler((0, 0, 0.22)))
-    add_cyl_bm(bm_ears, 0.011, 0.011, 0.026, Vector((0.128, 0.252, 1.980)), Euler((0.2, 0, 0)), segs=8)
+    add_cyl_bm(bm_ears, 0.011, 0.011, 0.026, Vector((0.128, 0.252, 1.980)), Euler((0.2, 0, 0)), segs=6)
     push_part("AcousticEars", bm_ears, mat_iron, 2.5)
 
     # Coiled wires running from BOTH acoustic ear cups into bolted junction lugs on the neck collar
@@ -836,28 +879,32 @@ def build_sculpted_monster() -> None:
         bm_wires,
         Vector((-0.132, 0.258, 1.954)),
         Vector((-0.098, 0.205, 1.805)),
-        turns=7.0,
+        turns=6.0,
         coil_radius=0.011,
         wire_radius=0.0034,
         bow_offset=Vector((-0.024, 0.008, 0.0)),
+        steps=24,
+        segs=4,
     )
     add_helical_coil(
         bm_wires,
         Vector((0.128, 0.250, 1.974)),
         Vector((0.098, 0.202, 1.805)),
-        turns=6.5,
+        turns=5.5,
         coil_radius=0.010,
         wire_radius=0.0034,
         bow_offset=Vector((0.022, 0.004, 0.0)),
+        steps=24,
+        segs=4,
     )
-    push_part("AcousticWires", bm_wires, mat_strap, 2.0)
+    push_part("AcousticWires", bm_wires, mat_strap, 2.0, continuous_uv=True)
 
     # E) Pitch-Black Recessed Oral Maw Abyss + Sinewy Cheek Tendons + Distended Split Lower Mandible + Double-Row Fangs
     bm_maw = bmesh.new()
-    ret = bmesh.ops.create_icosphere(bm_maw, subdivisions=2, radius=0.062)
+    ret = bmesh.ops.create_icosphere(bm_maw, subdivisions=1, radius=0.062)
     bmesh.ops.scale(bm_maw, vec=(1.06, 0.90, 1.18), verts=ret["verts"])
     bmesh.ops.translate(bm_maw, vec=(0.0, 0.274, 1.882), verts=ret["verts"])
-    push_part("MawAbyss", bm_maw, mat_maw, 1.0)
+    push_part("MawAbyss", bm_maw, mat_maw, 1.0, continuous_uv=True)
 
     # Split Distended Lower Mandible (left & right jaw rami hinged to a gruesome cleft chin)
     bm_jaw = bmesh.new()
@@ -868,8 +915,8 @@ def build_sculpted_monster() -> None:
             (Vector((side * 0.048, 0.346, 1.798)), 0.015, 0.017),
             (Vector((side * 0.015, 0.376, 1.778)), 0.011, 0.014),
         ]
-        add_tube_along_points(bm_jaw, ramus, segs=8)
-    push_part("SplitJaw", bm_jaw, mat_flesh, 2.2)
+        add_tube_along_points(bm_jaw, ramus, segs=5)
+    push_part("SplitJaw", bm_jaw, mat_flesh, 2.2, continuous_uv=True)
 
     # Dark Sinewy Cheek Tendons stretching taut between upper skull maxilla & distended lower mandible
     bm_cheek = bmesh.new()
@@ -885,8 +932,8 @@ def build_sculpted_monster() -> None:
                 (p_top, r_t * 1.25, r_t * 1.25),
                 (mid, r_t * 0.72, r_t * 0.85),
                 (p_bot, r_t * 1.15, r_t * 1.15),
-            ], segs=6)
-    push_part("CheekTendons", bm_cheek, mat_rag, 2.0)
+            ], segs=4)
+    push_part("CheekTendons", bm_cheek, mat_rag, 2.0, continuous_uv=True)
 
     # Double-Row Crooked Bone Fangs (outer jagged fangs + recessed inner needle fangs)
     # Kept split into upper (Head) and lower (Jaw) meshes so jaw articulation never stretches fangs!
@@ -903,7 +950,7 @@ def build_sculpted_monster() -> None:
             (Vector((ux, uy, 1.950)), 0.0078, 0.0078),
             (Vector((ux * 0.96, uy + 0.004, 1.950 - flen_u * 0.55)), 0.0045, 0.0045),
             (Vector((ux * 0.88 + tilt_u * 0.06, uy - 0.005, 1.950 - flen_u)), 0.0011, 0.0011),
-        ], segs=6)
+        ], segs=4)
 
         # Inner row upper needle teeth
         if abs(ti) <= 3:
@@ -913,7 +960,7 @@ def build_sculpted_monster() -> None:
             add_tube_along_points(bm_teeth_upper, [
                 (Vector((ix, iy, 1.946)), 0.0045, 0.0045),
                 (Vector((ix * 0.92, iy - 0.008, 1.946 - flen_iu)), 0.0009, 0.0009),
-            ], segs=5)
+            ], segs=3)
 
         if ti == 0:
             continue  # Leave gruesome split cleft gap right at the center!
@@ -926,7 +973,7 @@ def build_sculpted_monster() -> None:
             (Vector((lx, ly, lz)), 0.0070, 0.0070),
             (Vector((lx * 0.96, ly + 0.002, lz + flen_l * 0.55)), 0.0042, 0.0042),
             (Vector((lx * 0.90, ly - 0.007, lz + flen_l)), 0.0011, 0.0011),
-        ], segs=6)
+        ], segs=4)
 
         # Inner row lower needle teeth
         if abs(ti) <= 3:
@@ -937,25 +984,25 @@ def build_sculpted_monster() -> None:
             add_tube_along_points(bm_teeth_lower, [
                 (Vector((ilx, ily, ilz)), 0.0042, 0.0042),
                 (Vector((ilx * 0.92, ily - 0.007, ilz + flen_il)), 0.0009, 0.0009),
-            ], segs=5)
-    push_part("FangsUpper", bm_teeth_upper, mat_bone, 1.0)
-    push_part("FangsLower", bm_teeth_lower, mat_bone, 1.0)
+            ], segs=3)
+    push_part("FangsUpper", bm_teeth_upper, mat_bone, 1.0, continuous_uv=True)
+    push_part("FangsLower", bm_teeth_lower, mat_bone, 1.0, continuous_uv=True)
 
     # F) Heavy Containment Decay: Bolted Neck Collar, Harness Plates, Broken Shackles + Multi-Link Chains
     bm_iron_hw = bmesh.new()
     # Neck Collar + ear-wire junction lugs + side bolts
     neck_c = Vector((0.0, 0.19, 1.795))
-    add_curved_visor_band(bm_iron_hw, neck_c, 0.084, 0.090, 0.0, math.tau, 1.772, 1.828, 0.020, arc_steps=18)
+    add_curved_visor_band(bm_iron_hw, neck_c, 0.084, 0.090, 0.0, math.tau, 1.772, 1.828, 0.020, arc_steps=12)
     for side in (-1, 1):
         add_box_bm(bm_iron_hw, (0.028, 0.036, 0.058), (side * 0.100, 0.19, 1.80))
         # Terminal lug for acoustic ear cable
-        add_cyl_bm(bm_iron_hw, 0.012, 0.012, 0.024, Vector((side * 0.098, 0.205, 1.812)), Euler((0, side * 1.1, 0)), segs=8)
-    # Chest hanging broken shackle ring + 5-link chain from front collar D-ring
-    add_chain_link(bm_iron_hw, Vector((0.0, 0.292, 1.778)), Euler((0.2, 0.0, 0.0)), major_rx=0.020, major_ry=0.024, wire_r=0.0065)
-    for ci in range(5):
+        add_cyl_bm(bm_iron_hw, 0.012, 0.012, 0.024, Vector((side * 0.098, 0.205, 1.812)), Euler((0, side * 1.1, 0)), segs=6)
+    # Chest hanging broken shackle ring + 4-link chain from front collar D-ring
+    add_chain_link(bm_iron_hw, Vector((0.0, 0.292, 1.778)), Euler((0.2, 0.0, 0.0)), major_rx=0.020, major_ry=0.024, wire_r=0.0065, ring_pts=8, tube_segs=4)
+    for ci in range(4):
         c_pos = Vector((math.sin(ci * 0.4) * 0.008, 0.286 - ci * 0.014, 1.736 - ci * 0.042))
         c_rot = Euler((0.26, 0.0, math.pi * 0.5 if ci % 2 == 1 else 0.0))
-        add_chain_link(bm_iron_hw, c_pos, c_rot, major_rx=0.018, major_ry=0.028, wire_r=0.0055)
+        add_chain_link(bm_iron_hw, c_pos, c_rot, major_rx=0.018, major_ry=0.028, wire_r=0.0055, ring_pts=8, tube_segs=4)
 
     # Bolted iron harness buckles & shoulder strap anchor plates
     add_box_bm(bm_iron_hw, (0.068, 0.026, 0.052), (0.0, 0.184, 1.465))
@@ -963,34 +1010,34 @@ def build_sculpted_monster() -> None:
     for side in (-1, 1):
         add_box_bm(bm_iron_hw, (0.044, 0.032, 0.052), (side * 0.128, 0.095, 1.705), Euler((0.25, side * 0.2, 0)))
 
-    # Heavy Wrist Manacles + Broken Shackle Rings + 5-link Dangling Broken Chains
+    # Heavy Wrist Manacles + Broken Shackle Rings + 4-link Dangling Broken Chains
     for side in (-1, 1):
         asym_z = -0.025 if side == -1 else 0.0
         asym_y = 0.025 if side == 1 else 0.0
         wc = Vector((side * 0.33, 0.22 + asym_y, 0.77 + asym_z))
-        add_curved_visor_band(bm_iron_hw, wc, 0.044, 0.048, 0.0, math.tau, wc.z - 0.028, wc.z + 0.028, 0.015, arc_steps=14)
+        add_curved_visor_band(bm_iron_hw, wc, 0.044, 0.048, 0.0, math.tau, wc.z - 0.028, wc.z + 0.028, 0.015, arc_steps=10)
         add_box_bm(bm_iron_hw, (0.022, 0.028, 0.054), wc + Vector((side * 0.054, 0.0, 0.0)))
-        for ci in range(5):
+        for ci in range(4):
             ch_pos = wc + Vector((side * 0.058, 0.014 - ci * 0.008, -0.040 - ci * 0.040))
             ch_rot = Euler((0.08, side * 0.15, math.pi * 0.5 if ci % 2 == 1 else 0.0))
-            add_chain_link(bm_iron_hw, ch_pos, ch_rot, major_rx=0.016, major_ry=0.026, wire_r=0.0052)
+            add_chain_link(bm_iron_hw, ch_pos, ch_rot, major_rx=0.016, major_ry=0.026, wire_r=0.0052, ring_pts=8, tube_segs=4)
 
     # Right Ankle Shackle + 3-link broken trailing chain (stays safely above z = 0.03)
     ac = Vector((0.155, -0.025, 0.135))
-    add_curved_visor_band(bm_iron_hw, ac, 0.044, 0.048, 0.0, math.tau, ac.z - 0.024, ac.z + 0.024, 0.014, arc_steps=14)
+    add_curved_visor_band(bm_iron_hw, ac, 0.044, 0.048, 0.0, math.tau, ac.z - 0.024, ac.z + 0.024, 0.014, arc_steps=10)
     for ci in range(3):
         a_pos = ac + Vector((0.054 + ci * 0.014, -0.02 - ci * 0.028, -0.032 - ci * 0.026))
         a_rot = Euler((0.65, 0.2, math.pi * 0.5 if ci % 2 == 1 else 0.0))
-        add_chain_link(bm_iron_hw, a_pos, a_rot, major_rx=0.015, major_ry=0.024, wire_r=0.0048)
-    push_part("RestraintIron", bm_iron_hw, mat_iron, 2.5)
+        add_chain_link(bm_iron_hw, a_pos, a_rot, major_rx=0.015, major_ry=0.024, wire_r=0.0048, ring_pts=8, tube_segs=4)
+    push_part("RestraintIron", bm_iron_hw, mat_iron, 2.5, continuous_uv=True)
 
     # Heavy Leather-Iron Containment Harness Straps (routed cleanly outside back scapulae!)
     bm_straps = bmesh.new()
     chest_band = []
-    for k in range(21):
-        a = (k / 20.0) * math.tau
+    for k in range(13):
+        a = (k / 12.0) * math.tau
         chest_band.append((Vector((math.sin(a) * 0.176, 0.052 + math.cos(a) * 0.134, 1.47)), 0.014, 0.018))
-    add_tube_along_points(bm_straps, chest_band, segs=6, cap_start=False, cap_end=False)
+    add_tube_along_points(bm_straps, chest_band, segs=4, cap_start=False, cap_end=False)
     for side in (-1, 1):
         strap_pts = [
             (Vector((side * 0.095, 0.150, 1.46)), 0.019, 0.008),
@@ -999,21 +1046,21 @@ def build_sculpted_monster() -> None:
             (Vector((side * 0.126, -0.048, 1.65)), 0.019, 0.008),
             (Vector((side * 0.105, -0.070, 1.47)), 0.019, 0.008),
         ]
-        add_tube_along_points(bm_straps, strap_pts, segs=6)
+        add_tube_along_points(bm_straps, strap_pts, segs=4)
     waist_band = []
-    for k in range(21):
-        a = (k / 20.0) * math.tau
+    for k in range(13):
+        a = (k / 12.0) * math.tau
         waist_band.append((Vector((math.sin(a) * 0.144, 0.0 + math.cos(a) * 0.104, 1.03)), 0.013, 0.015))
-    add_tube_along_points(bm_straps, waist_band, segs=6, cap_start=False, cap_end=False)
-    push_part("SurgicalStraps", bm_straps, mat_strap, 2.2)
+    add_tube_along_points(bm_straps, waist_band, segs=4, cap_start=False, cap_end=False)
+    push_part("SurgicalStraps", bm_straps, mat_strap, 2.2, continuous_uv=True)
 
     # Asymmetric Tattered Bloodied Containment Rags draping smoothly from waist
     bm_rags = bmesh.new()
     waist_wrap = []
-    for k in range(21):
-        a = (k / 20.0) * math.tau
+    for k in range(13):
+        a = (k / 12.0) * math.tau
         waist_wrap.append((Vector((math.sin(a) * 0.136, math.cos(a) * 0.096, 1.005)), 0.006, 0.024))
-    add_tube_along_points(bm_rags, waist_wrap, segs=6, cap_start=False, cap_end=False)
+    add_tube_along_points(bm_rags, waist_wrap, segs=4, cap_start=False, cap_end=False)
     rag_defs = [
         (-0.132, 0.062, 0.42, -0.030, 0.072, 0.056),
         (-0.062, 0.090, 0.28, -0.008, 0.082, 0.054),
@@ -1030,8 +1077,8 @@ def build_sculpted_monster() -> None:
             (Vector((rx + flare_x * 0.45, (ry + end_y) * 0.55, 1.010 - rlen * 0.45)), w_strip * 0.82, 0.0040),
             (Vector((rx + flare_x, end_y, 1.010 - rlen)), 0.010, 0.0035),
         ]
-        add_tube_along_points(bm_rags, pts, segs=6)
-    push_part("TornGarmentRags", bm_rags, mat_rag, 2.2)
+        add_tube_along_points(bm_rags, pts, segs=4)
+    push_part("TornGarmentRags", bm_rags, mat_rag, 2.2, continuous_uv=True)
 
     # 4. Create Fully Articulated Horror Armature (MonsterArmature) & Bind Watertight Body First
     arm_data = bpy.data.armatures.new("MonsterArmature")

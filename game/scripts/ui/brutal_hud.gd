@@ -34,11 +34,15 @@ const COL_ACCENT := COL_SODIUM
 const COL_DANGER := COL_SIGNAL
 const COL_OK := COL_PHOSPHOR
 
-const JOY_SIZE := 168.0
-const JOY_KNOB_SIZE := 66.0
-const JOY_REST_POS := Vector2(51.0, 51.0)
-const JOY_MAX_R := 66.0
-const JOY_SPRINT_RATIO := 0.75
+const JOY_SIZE := 176.0
+const JOY_KNOB_SIZE := 64.0
+const JOY_REST_POS := Vector2((JOY_SIZE - JOY_KNOB_SIZE) * 0.5, (JOY_SIZE - JOY_KNOB_SIZE) * 0.5)
+const JOY_MAX_R := 84.0
+const JOY_WALK_DEADZONE := 0.08
+const JOY_SPRINT_RATIO := 0.90
+const JOY_WALK_RING_RATIO := 0.88
+const JOY_OFFSET_LEFT := 52.0
+const JOY_OFFSET_BOTTOM := -42.0
 
 
 class AcousticScopeControl extends Control:
@@ -47,20 +51,26 @@ class AcousticScopeControl extends Control:
 	var is_holding_breath: bool = false
 	var chase_flare: float = 0.0
 	var _wave_history: PackedFloat32Array = PackedFloat32Array()
+	var _poly_pts: PackedVector2Array = PackedVector2Array()
 	var _wave_accum: float = 0.0
+	var _redraw_accum: float = 0.0
 	var _pulse_time: float = 0.0
+	var _prev_holding_breath: bool = false
+	var _first_draw: bool = true
 
 	func _init() -> void:
 		custom_minimum_size = Vector2(188, 38)
 		mouse_filter = Control.MOUSE_FILTER_IGNORE
 		_wave_history.resize(44)
 		_wave_history.fill(0.0)
+		_poly_pts.resize(44)
 
 	func tick(delta: float, holding_breath: bool) -> void:
 		is_holding_breath = holding_breath
 		_pulse_time += delta
 		_wave_accum += delta
-		if _wave_accum >= 0.04:
+		_redraw_accum += delta
+		if _wave_accum >= 0.05:
 			_wave_accum = 0.0
 			var nl := AcousticBus.current_noise_level
 			for i in range(_wave_history.size() - 1):
@@ -70,7 +80,11 @@ class AcousticScopeControl extends Control:
 			if is_holding_breath:
 				sample *= 0.22
 			_wave_history[_wave_history.size() - 1] = clampf(sample, -1.0, 1.0)
-		queue_redraw()
+		if _first_draw or _redraw_accum >= 0.05 or is_holding_breath != _prev_holding_breath:
+			_first_draw = false
+			_redraw_accum = 0.0
+			_prev_holding_breath = is_holding_breath
+			queue_redraw()
 
 	func _draw() -> void:
 		var sz := size
@@ -104,15 +118,14 @@ class AcousticScopeControl extends Control:
 			var f_bold := mono_bold if mono_bold != null else mono_font
 			draw_string(f_bold, Vector2(sz.x - 46.0, 12.0), db_str, HORIZONTAL_ALIGNMENT_LEFT, -1, 11, trace_col)
 
-		var poly := PackedVector2Array()
 		var n_pts := _wave_history.size()
 		for i in range(n_pts):
 			var px := lerpf(5.0, sz.x - 5.0, float(i) / float(max(1, n_pts - 1)))
 			var py := mid_y - _wave_history[i] * (sz.y * 0.30)
-			poly.append(Vector2(px, py))
-		if poly.size() >= 2:
-			draw_polyline(poly, Color(trace_col, 0.25), 3.2, true)
-			draw_polyline(poly, trace_col, 1.5, true)
+			_poly_pts[i] = Vector2(px, py)
+		if _poly_pts.size() >= 2:
+			draw_polyline(_poly_pts, Color(trace_col, 0.25), 3.2, true)
+			draw_polyline(_poly_pts, trace_col, 1.5, true)
 
 
 class ChaseInterferenceOverlay extends Control:
@@ -120,20 +133,29 @@ class ChaseInterferenceOverlay extends Control:
 	var proximity: float = 0.0
 	var pulse_time: float = 0.0
 	var reduce_motion: bool = false
+	var _redraw_accum: float = 0.0
+	var _was_visible: bool = false
 
 	func _init() -> void:
 		set_anchors_preset(Control.PRESET_FULL_RECT)
 		mouse_filter = Control.MOUSE_FILTER_IGNORE
 		visible = false
 
-	func update_state(p_intensity: float, p_proximity: float, p_pulse_time: float, p_reduce_motion: bool) -> void:
+	func update_state(delta: float, p_intensity: float, p_proximity: float, p_pulse_time: float, p_reduce_motion: bool) -> void:
 		intensity = clampf(p_intensity, 0.0, 1.0)
 		proximity = clampf(p_proximity, 0.0, 1.0)
 		pulse_time = p_pulse_time
 		reduce_motion = p_reduce_motion
 		visible = intensity > 0.005 and not reduce_motion
 		if visible:
-			queue_redraw()
+			_redraw_accum += delta
+			if not _was_visible or _redraw_accum >= 0.06:
+				_redraw_accum = 0.0
+				_was_visible = true
+				queue_redraw()
+		else:
+			_was_visible = false
+			_redraw_accum = 0.0
 
 	func _draw() -> void:
 		if intensity <= 0.005 or reduce_motion:
@@ -160,9 +182,9 @@ class ChaseInterferenceOverlay extends Control:
 			draw_rect(Rect2(0.0, bh, bw, maxf(0.0, sz.y - bh * 2.0)), edge_col, true)
 			draw_rect(Rect2(sz.x - bw, bh, bw, maxf(0.0, sz.y - bh * 2.0)), edge_col, true)
 
-		# Erratic horizontal signal-interference panic bars & dark/crimson tears
-		var phase := int(floor(pulse_time * 24.0))
-		var tear_count := int(round(lerpf(4.0, 12.0, proximity)))
+		# Erratic horizontal signal-interference panic bars & dark/crimson tears (capped at 8)
+		var phase := int(floor(pulse_time * 18.0))
+		var tear_count := clampi(int(round(lerpf(4.0, 8.0, proximity))), 4, 8)
 		for i in range(tear_count):
 			var seed_v := (i * 53 + phase * 29) % 101
 			var y_norm := float(seed_v) / 101.0
@@ -316,6 +338,14 @@ var _status_pill_style: StyleBoxFlat
 var _stalker_alert_lbl: Label
 var _status_accent: Color = COL_RULE_STRONG
 var _status_is_urgent: bool = false
+var _last_top_bar_border_col: Color = Color(-1, -1, -1, -1)
+var _last_top_bar_bg_col: Color = Color(-1, -1, -1, -1)
+var _last_top_bar_border_w: int = -1
+var _last_status_txt: String = ""
+var _last_status_col: Color = Color(-1, -1, -1, -1)
+var _last_pill_bg: Color = Color(-1, -1, -1, -1)
+var _last_pill_border: Color = Color(-1, -1, -1, -1)
+var _last_pill_border_w: int = -1
 
 var _breath_bar: ProgressBar
 
@@ -324,6 +354,9 @@ var _reticle_canvas: Control
 var _reticle_gap: float = 6.0
 var _reticle_target_gap: float = 6.0
 var _reticle_active: bool = false
+var _last_drawn_reticle_gap: float = -1.0
+var _last_drawn_reticle_active: bool = false
+var _last_reticle_dot_active: int = -1
 
 var _prompt_box: PanelContainer
 var _prompt_icon: TextureRect
@@ -571,6 +604,9 @@ func _attach_corner_ticks(ctrl: Control, col: Color = COL_RULE_STRONG, len_px: f
 
 func _set_corner_tick_color(ctrl: Control, col: Color) -> void:
 	if is_instance_valid(ctrl):
+		var prev: Color = ctrl.get_meta("tick_color", Color(-1, -1, -1, -1))
+		if prev.is_equal_approx(col):
+			return
 		ctrl.set_meta("tick_color", col)
 		ctrl.queue_redraw()
 
@@ -1811,23 +1847,25 @@ func _build_gameplay_hud() -> void:
 		_slot_nums.append(num)
 
 	# 6. MOBILE TOUCH CONTROLS:
-	#    - Left Floating Virtual Joystick (168x168, 66x66 knob, outer 75% auto-sprint ring)
+	#    - Left Floating Virtual Joystick (176x176, 84px travel radius, 0.88 walk ring, >= 0.90 auto-sprint)
 	#    - Double-Tap Right Side to Interact (no Interact/Sprint buttons!)
-	#    - Symmetrical 2x2 Bottom-Right Action Grid (72x72, 14px gaps; Drop appears only when holding an item)
+	#    - Symmetrical 2x2 Action Cluster in natural right-thumb arc (74x74, 14px gaps, 58px right / 48px bottom margin)
 	_joy_base = Panel.new()
-	_anchor_box(_joy_base, 0.0, 1.0, 0.0, 1.0, 32.0, -200.0, 200.0, -32.0)
+	_anchor_box(_joy_base, 0.0, 1.0, 0.0, 1.0, JOY_OFFSET_LEFT, JOY_OFFSET_BOTTOM - JOY_SIZE, JOY_OFFSET_LEFT + JOY_SIZE, JOY_OFFSET_BOTTOM)
 	_joy_base.custom_minimum_size = Vector2(JOY_SIZE, JOY_SIZE)
 	_joy_base.add_theme_stylebox_override("panel", _make_box(Color(COL_INK.r, COL_INK.g, COL_INK.b, 0.56), COL_RULE_STRONG, int(JOY_SIZE * 0.5), 0, 0, 1))
 	_joy_base.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_joy_base.draw.connect(func():
 		var c := _joy_base.size * 0.5
 		var active := (_joy_touch_idx != -1)
-		var outer_col := Color(COL_SODIUM, 0.72) if active else Color(COL_PAPER_DIM, 0.30)
-		_joy_base.draw_arc(c, JOY_MAX_R + 6.0, 0.0, TAU, 56, outer_col, 1.4, true)
-		var sprint_r := JOY_MAX_R * JOY_SPRINT_RATIO
-		var sprint_col := COL_SODIUM if _joy_sprinting else Color(COL_SODIUM, 0.28 if active else 0.16)
-		var sprint_w := 2.4 if _joy_sprinting else 1.2
-		_joy_base.draw_arc(c, sprint_r, 0.0, TAU, 48, sprint_col, sprint_w, true)
+		var walk_r := JOY_MAX_R * JOY_WALK_RING_RATIO
+		var walk_col := Color(COL_PAPER_DIM, 0.30 if active else 0.18)
+		_joy_base.draw_arc(c, walk_r, 0.0, TAU, 56, walk_col, 1.2, true)
+		var sprint_rim_col := COL_SODIUM.lerp(COL_SIGNAL, 0.45) if _joy_sprinting else Color(COL_PAPER_DIM, 0.34 if active else 0.22)
+		var sprint_rim_w := 2.6 if _joy_sprinting else 1.4
+		_joy_base.draw_arc(c, JOY_MAX_R + 2.0, 0.0, TAU, 64, sprint_rim_col, sprint_rim_w, true)
+		if _joy_sprinting:
+			_joy_base.draw_arc(c, JOY_MAX_R * JOY_SPRINT_RATIO, 0.0, TAU, 56, Color(COL_SIGNAL, 0.72), 1.6, true)
 		_joy_base.draw_line(c + Vector2(-10, 0), c + Vector2(10, 0), Color(COL_PAPER_DIM, 0.25), 1.0)
 		_joy_base.draw_line(c + Vector2(0, -10), c + Vector2(0, 10), Color(COL_PAPER_DIM, 0.25), 1.0)
 	)
@@ -1840,8 +1878,8 @@ func _build_gameplay_hud() -> void:
 	_joy_knob.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_joy_base.add_child(_joy_knob)
 
-	# Symmetrical 2x2 Thumb Grid (72x72, 14px gap, 24px right margin, 28px bottom margin)
-	_btn_breath = _make_icon_action_btn("ui_breath", Vector2(-96, -100), Vector2(72, 72), Control.PRESET_BOTTOM_RIGHT)
+	# Symmetrical 2x2 Thumb Cluster (74x74, 14px gap, 58px right margin, 48px bottom margin)
+	_btn_breath = _make_icon_action_btn("ui_breath", Vector2(-132, -122), Vector2(74, 74), Control.PRESET_BOTTOM_RIGHT)
 	_btn_breath.button_down.connect(func():
 		if player != null:
 			player.touch_holding_breath = true
@@ -1851,19 +1889,19 @@ func _build_gameplay_hud() -> void:
 			player.touch_holding_breath = false
 	)
 
-	_btn_crouch = _make_icon_action_btn("ui_crouch", Vector2(-182, -100), Vector2(72, 72), Control.PRESET_BOTTOM_RIGHT)
+	_btn_crouch = _make_icon_action_btn("ui_crouch", Vector2(-220, -122), Vector2(74, 74), Control.PRESET_BOTTOM_RIGHT)
 	_btn_crouch.pressed.connect(func():
 		if player != null:
 			player.toggle_crouch()
 	)
 
-	_btn_flashlight = _make_icon_action_btn("ui_flashlight", Vector2(-96, -186), Vector2(72, 72), Control.PRESET_BOTTOM_RIGHT)
+	_btn_flashlight = _make_icon_action_btn("ui_flashlight", Vector2(-132, -210), Vector2(74, 74), Control.PRESET_BOTTOM_RIGHT)
 	_btn_flashlight.pressed.connect(func():
 		if player != null:
 			player.toggle_flashlight()
 	)
 
-	_btn_drop = _make_icon_action_btn("ui_drop", Vector2(-182, -186), Vector2(72, 72), Control.PRESET_BOTTOM_RIGHT)
+	_btn_drop = _make_icon_action_btn("ui_drop", Vector2(-220, -210), Vector2(74, 74), Control.PRESET_BOTTOM_RIGHT)
 	_btn_drop.pressed.connect(func():
 		if player != null:
 			player.drop_or_throw_equipped()
@@ -2895,11 +2933,11 @@ func update_runtime_hud(
 			var vig_pulse := 0.90 + 0.10 * sin(_chase_pulse_t * 8.5)
 			var vig_a := _chase_intensity * lerpf(0.56, 0.94, _chase_prox) * vig_pulse
 			_chase_vignette.modulate = Color(1.0, 1.0, 1.0, clampf(vig_a, 0.0, 0.96))
-		_chase_interference.update_state(_chase_intensity, _chase_prox, _chase_pulse_t, reduce_motion)
+		_chase_interference.update_state(delta, _chase_intensity, _chase_prox, _chase_pulse_t, reduce_motion)
 	else:
 		_chase_panic_overlay.visible = false
 		_chase_vignette.modulate.a = 0.0
-		_chase_interference.visible = false
+		_chase_interference.update_state(delta, 0.0, 0.0, 0.0, reduce_motion)
 
 	var chase_flare := _chase_intensity * (1.0 if reduce_motion else (0.76 + 0.24 * absf(sin(_chase_pulse_t * 7.5))))
 	if _acoustic_scope != null:
@@ -2913,13 +2951,27 @@ func update_runtime_hud(
 				COL_SODIUM if nl_bar >= 0.18 else COL_RULE_STRONG
 			)
 		)
-		_top_bar_style.border_color = COL_RULE_STRONG.lerp(COL_SIGNAL, chase_flare)
-		_top_bar_style.bg_color = COL_PANEL.lerp(Color(0.24, 0.05, 0.04, 0.95), chase_flare * 0.45)
-		_top_bar_style.set_border_width_all(2 if chase_flare > 0.22 else 1)
-		_set_corner_tick_color(_top_status_bar, bar_tick_col.lerp(COL_SIGNAL, chase_flare))
+		var top_brd_col := COL_RULE_STRONG if chase_flare <= 0.005 else COL_RULE_STRONG.lerp(COL_SIGNAL, chase_flare)
+		var top_bg_col := COL_PANEL if chase_flare <= 0.005 else COL_PANEL.lerp(Color(0.24, 0.05, 0.04, 0.95), chase_flare * 0.45)
+		var top_brd_w := 2 if chase_flare > 0.22 else 1
+		if not top_brd_col.is_equal_approx(_last_top_bar_border_col):
+			_last_top_bar_border_col = top_brd_col
+			_top_bar_style.border_color = top_brd_col
+		if not top_bg_col.is_equal_approx(_last_top_bar_bg_col):
+			_last_top_bar_bg_col = top_bg_col
+			_top_bar_style.bg_color = top_bg_col
+		if top_brd_w != _last_top_bar_border_w:
+			_last_top_bar_border_w = top_brd_w
+			_top_bar_style.set_border_width_all(top_brd_w)
+		_set_corner_tick_color(_top_status_bar, bar_tick_col if chase_flare <= 0.005 else bar_tick_col.lerp(COL_SIGNAL, chase_flare))
 
-		_breath_bar.visible = (player.is_holding_breath or player.breath_stamina < 0.99)
-		_breath_bar.value = player.breath_stamina * 100.0
+		var breath_vis := (player.is_holding_breath or player.breath_stamina < 0.99)
+		if _breath_bar.visible != breath_vis:
+			_breath_bar.visible = breath_vis
+		if breath_vis:
+			var target_bval := player.breath_stamina * 100.0
+			if absf(_breath_bar.value - target_bval) > 0.05:
+				_breath_bar.value = target_bval
 
 		# Diegetic blood-edge vignette when wounded or downed
 		var is_injured := (player.wounds > 0 or player.is_downed)
@@ -2936,8 +2988,9 @@ func update_runtime_hud(
 		else:
 			_blood_vig_alpha = move_toward(_blood_vig_alpha, 0.0, delta * 3.0)
 			if _blood_vig_alpha <= 0.005:
-				_blood_vignette.modulate.a = 0.0
-				_blood_vignette.visible = false
+				if _blood_vignette.visible:
+					_blood_vignette.modulate.a = 0.0
+					_blood_vignette.visible = false
 			else:
 				_blood_vignette.modulate.a = _blood_vig_alpha * 0.55
 
@@ -2950,17 +3003,25 @@ func update_runtime_hud(
 			_apply_touch_btn_highlight(_btn_crouch, player.is_crouching, COL_SODIUM)
 			_apply_touch_btn_highlight(_btn_breath, player.is_holding_breath, COL_COLD)
 			if _btn_drop != null:
-				_btn_drop.visible = not player.get_equipped_item().is_empty()
+				var want_drop := not player.get_equipped_item().is_empty()
+				if _btn_drop.visible != want_drop:
+					_btn_drop.visible = want_drop
 
-		# Precision Reticle Update
+		# Precision Reticle Update (only redraw on meaningful delta)
 		var crouch_or_hide := player.is_crouching or player.is_under_desk or player.is_hiding_in_locker or player.is_holding_breath
 		var sprinting := Vector2(player.velocity.x, player.velocity.z).length() > 4.2 and not crouch_or_hide
 		_reticle_target_gap = 3.5 if crouch_or_hide else (9.0 if sprinting else 5.5)
 		if _reticle_active:
 			_reticle_target_gap = maxf(3.0, _reticle_target_gap - 1.5)
 		_reticle_gap = _reticle_target_gap if reduce_motion else lerpf(_reticle_gap, _reticle_target_gap, clampf(delta * 14.0, 0.0, 1.0))
-		_reticle_dot.color = COL_SODIUM if _reticle_active else Color(COL_PAPER, 0.72)
-		_reticle_canvas.queue_redraw()
+		var dot_state := 1 if _reticle_active else 0
+		if dot_state != _last_reticle_dot_active:
+			_last_reticle_dot_active = dot_state
+			_reticle_dot.color = COL_SODIUM if _reticle_active else Color(COL_PAPER, 0.72)
+		if absf(_reticle_gap - _last_drawn_reticle_gap) > 0.05 or _reticle_active != _last_drawn_reticle_active:
+			_last_drawn_reticle_gap = _reticle_gap
+			_last_drawn_reticle_active = _reticle_active
+			_reticle_canvas.queue_redraw()
 
 		# Diegetic top-center status whisper plate
 		var status_txt := ""
@@ -3004,19 +3065,32 @@ func update_runtime_hud(
 			status_col = COL_SODIUM
 			border_col = COL_SODIUM
 
-		_status_pill.visible = not status_txt.is_empty()
-		if not status_txt.is_empty():
-			_stalker_alert_lbl.text = status_txt
-			_stalker_alert_lbl.add_theme_color_override("font_color", status_col)
+		var pill_vis := not status_txt.is_empty()
+		if _status_pill.visible != pill_vis:
+			_status_pill.visible = pill_vis
+		if pill_vis:
+			if status_txt != _last_status_txt:
+				_last_status_txt = status_txt
+				_stalker_alert_lbl.text = status_txt
+			if not status_col.is_equal_approx(_last_status_col):
+				_last_status_col = status_col
+				_stalker_alert_lbl.add_theme_color_override("font_color", status_col)
 			_status_is_urgent = urgent
 			if urgent and not reduce_motion:
 				_status_pulse_t += delta * (8.0 if in_chase else 6.0)
 				var pulse_a := (0.72 + 0.28 * absf(sin(_status_pulse_t))) if in_chase else (0.55 + 0.40 * absf(sin(_status_pulse_t)))
 				border_col = Color(border_col, pulse_a)
 			var pill_bg := COL_PANEL.lerp(Color(0.28, 0.05, 0.04, 0.96), 0.45 * chase_flare) if in_chase else COL_PANEL
-			_status_pill_style.bg_color = pill_bg
-			_status_pill_style.border_color = border_col
-			_status_pill_style.set_border_width_all(2 if in_chase else 1)
+			var pill_bw := 2 if in_chase else 1
+			if not pill_bg.is_equal_approx(_last_pill_bg):
+				_last_pill_bg = pill_bg
+				_status_pill_style.bg_color = pill_bg
+			if not border_col.is_equal_approx(_last_pill_border):
+				_last_pill_border = border_col
+				_status_pill_style.border_color = border_col
+			if pill_bw != _last_pill_border_w:
+				_last_pill_border_w = pill_bw
+				_status_pill_style.set_border_width_all(pill_bw)
 			_status_accent = border_col
 			_set_corner_tick_color(_status_pill, COL_SIGNAL if in_chase else border_col)
 
@@ -3025,11 +3099,15 @@ func update_runtime_hud(
 		threat = maxf(threat, 0.72)
 	if player != null and player.wounds > 0:
 		threat = maxf(threat, 0.18)
-	if reduce_motion:
-		_danger_overlay.color.a = threat * 0.14
-	else:
-		_danger_pulse += delta * (7.0 if stalker_state == MonsterDirector.STATE_CHASE else 3.2)
-		_danger_overlay.color.a = threat * (0.12 + 0.08 * sin(_danger_pulse))
+	var target_danger_a := 0.0
+	if threat > 0.001:
+		if reduce_motion:
+			target_danger_a = threat * 0.14
+		else:
+			_danger_pulse += delta * (7.0 if stalker_state == MonsterDirector.STATE_CHASE else 3.2)
+			target_danger_a = threat * (0.12 + 0.08 * sin(_danger_pulse))
+	if not is_equal_approx(_danger_overlay.color.a, target_danger_a):
+		_danger_overlay.color.a = target_danger_a
 
 
 func _keycode_to_digit(kc: Key) -> String:
@@ -3139,7 +3217,7 @@ func _input(event: InputEvent) -> void:
 			if st.index == _joy_touch_idx:
 				_joy_touch_idx = -1
 				_joy_sprinting = false
-				_anchor_box(_joy_base, 0.0, 1.0, 0.0, 1.0, 32.0, -200.0, 200.0, -32.0)
+				_anchor_box(_joy_base, 0.0, 1.0, 0.0, 1.0, JOY_OFFSET_LEFT, JOY_OFFSET_BOTTOM - JOY_SIZE, JOY_OFFSET_LEFT + JOY_SIZE, JOY_OFFSET_BOTTOM)
 				_joy_knob.position = JOY_REST_POS
 				_joy_base.queue_redraw()
 				if player != null:
@@ -3170,12 +3248,15 @@ func _input(event: InputEvent) -> void:
 
 func _update_joystick(touch_pos: Vector2) -> void:
 	var diff := touch_pos - _joy_center
-	var ratio := diff.length() / JOY_MAX_R
+	var dist := diff.length()
+	var ratio := dist / JOY_MAX_R
+	var was_sprinting := _joy_sprinting
 	_joy_sprinting = (ratio >= JOY_SPRINT_RATIO)
-	if diff.length() > JOY_MAX_R:
-		diff = diff.normalized() * JOY_MAX_R
+	if dist > JOY_MAX_R:
+		diff = diff / dist * JOY_MAX_R
 	_joy_knob.position = JOY_REST_POS + diff
-	_joy_base.queue_redraw()
+	if was_sprinting != _joy_sprinting:
+		_joy_base.queue_redraw()
 	if player != null:
-		player.touch_move_vec = diff / JOY_MAX_R
+		player.touch_move_vec = Vector2.ZERO if ratio < JOY_WALK_DEADZONE else (diff / JOY_MAX_R)
 		player.touch_sprinting = _joy_sprinting

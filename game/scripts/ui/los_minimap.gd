@@ -5,6 +5,7 @@ const SCOPE_CENTER := Vector2(90.0, 90.0)
 const SCOPE_RADIUS := 74.0
 const WORLD_RANGE := 17.0
 const RAY_COUNT := 108
+const REDRAW_INTERVAL := 0.066
 
 # НИИ-07 Design System Tokens
 const COL_INK := Color(0.039, 0.047, 0.043, 0.96)
@@ -27,15 +28,50 @@ var vents_ref: Dictionary = {}
 var _open_doors_lookup: Dictionary = {}
 var _open_vents_lookup: Dictionary = {}
 var _pulse_time: float = 0.0
+var _redraw_accum: float = 0.0
+var _force_redraw: bool = true
 var _echo_ping_dir: Vector2 = Vector2.ZERO
 var _echo_ping_alpha: float = 0.0
 var _mono_font: Font = null
 var _mono_bold: Font = null
 
+var _ray_dirs: PackedVector2Array = PackedVector2Array()
+var _active_seg_indices: PackedInt32Array = PackedInt32Array()
+var _hit_pts: PackedVector2Array = PackedVector2Array()
+var _hit_blocked: PackedByteArray = PackedByteArray()
+var _hit_seg_ids: PackedInt32Array = PackedInt32Array()
+var _hit_kinds: PackedByteArray = PackedByteArray()
+
+var _tri_pts: PackedVector2Array = PackedVector2Array([SCOPE_CENTER, Vector2.ZERO, Vector2.ZERO])
+var _diamond_pts: PackedVector2Array = PackedVector2Array([Vector2.ZERO, Vector2.ZERO, Vector2.ZERO, Vector2.ZERO])
+var _chev_pts: PackedVector2Array = PackedVector2Array([Vector2.ZERO, Vector2.ZERO, Vector2.ZERO])
+var _self_pts: PackedVector2Array = PackedVector2Array([
+	SCOPE_CENTER + Vector2(0, -6.0),
+	SCOPE_CENTER + Vector2(4.4, 4.4),
+	SCOPE_CENTER + Vector2(0, 2.0),
+	SCOPE_CENTER + Vector2(-4.4, 4.4)
+])
+
+var _has_cached_rays: bool = false
+var _last_p_xz: Vector2 = Vector2.INF
+var _last_yaw: float = 9999.0
+var _last_flash: bool = false
+var _last_hiding: bool = false
+var _last_door_vent_sig: int = -1
+
 
 func _ready() -> void:
 	custom_minimum_size = Vector2(180, 180)
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
+
+	_ray_dirs.resize(RAY_COUNT)
+	_hit_pts.resize(RAY_COUNT)
+	_hit_blocked.resize(RAY_COUNT)
+	_hit_seg_ids.resize(RAY_COUNT)
+	_hit_kinds.resize(RAY_COUNT)
+	for i in range(RAY_COUNT):
+		var ang := float(i) * TAU / float(RAY_COUNT)
+		_ray_dirs[i] = Vector2(cos(ang), sin(ang))
 
 	if ResourceLoader.exists("res://assets/fonts/IBMPlexMono-Regular.ttf"):
 		_mono_font = load("res://assets/fonts/IBMPlexMono-Regular.ttf") as Font
@@ -61,6 +97,9 @@ func configure_map(
 	wall_segments = p_wall_segs
 	doors_ref = p_doors
 	vents_ref = p_vents
+	_has_cached_rays = false
+	_last_door_vent_sig = -1
+	_force_redraw = true
 	if monster_director != null and not monster_director.echolocation_pulsed.is_connected(_on_echolocation_pulsed):
 		monster_director.echolocation_pulsed.connect(_on_echolocation_pulsed)
 
@@ -72,21 +111,39 @@ func _on_echolocation_pulsed(origin: Vector3) -> void:
 	if diff.length() > 0.1 and diff.length() < 34.0:
 		_echo_ping_dir = diff.normalized()
 		_echo_ping_alpha = 1.0
+		_force_redraw = true
 
 
 func tick_minimap(delta: float) -> void:
 	_pulse_time += delta
 	_echo_ping_alpha = move_toward(_echo_ping_alpha, 0.0, delta * 0.65)
+	_redraw_accum += delta
+	if not _force_redraw and _redraw_accum < REDRAW_INTERVAL:
+		return
+	_redraw_accum = 0.0
+	_force_redraw = false
 
+	var sig := 0
+	var bit_idx := 0
 	_open_doors_lookup.clear()
 	for d in doors_ref:
 		if bool(d.get("is_open", false)):
 			_open_doors_lookup[str(d["id"])] = true
+			if bit_idx < 60:
+				sig = sig | (1 << bit_idx)
+		bit_idx += 1
 
 	_open_vents_lookup.clear()
 	for vid in vents_ref.keys():
 		if bool(vents_ref[vid].get("is_open", false)):
 			_open_vents_lookup[str(vid)] = true
+			if bit_idx < 60:
+				sig = sig | (1 << bit_idx)
+		bit_idx += 1
+
+	if sig != _last_door_vent_sig or bit_idx >= 60:
+		_last_door_vent_sig = sig
+		_has_cached_rays = false
 
 	queue_redraw()
 
@@ -185,7 +242,7 @@ func _draw() -> void:
 	draw_line(SCOPE_CENTER + Vector2(0, -SCOPE_RADIUS + 6.0), SCOPE_CENTER + Vector2(0, -8.0), Color(COL_PHOSPHOR, 0.10), 1.0)
 	draw_line(SCOPE_CENTER + Vector2(0, 8.0), SCOPE_CENTER + Vector2(0, SCOPE_RADIUS - 6.0), Color(COL_PHOSPHOR, 0.10), 1.0)
 
-	# 2. Real-Time Line-of-Sight Raycast & Contacts (Static visibility cone, no sweep beam)
+	# 2. Real-Time Line-of-Sight Raycast & Contacts (Static visibility cone, cached when player pose/doors unchanged)
 	if player != null and not wall_segments.is_empty():
 		var p_xz := Vector2(player.global_position.x, player.global_position.z)
 		var yaw := player.rotation.y
@@ -193,88 +250,91 @@ func _draw() -> void:
 		var sin_y := sin(yaw)
 		var fwd_xz := Vector2(-sin_y, -cos_y)
 
-		var active_segs: Array[Dictionary] = []
-		var r_sq := (WORLD_RANGE + 6.0) * (WORLD_RANGE + 6.0)
-		for idx in range(wall_segments.size()):
-			var seg: Dictionary = wall_segments[idx]
-			if not _is_segment_blocking(seg):
-				continue
-			var sa: Vector2 = seg["a"]
-			var sb: Vector2 = seg["b"]
-			var closest := Geometry2D.get_closest_point_to_segment(p_xz, sa, sb)
-			if p_xz.distance_squared_to(closest) <= r_sq:
-				active_segs.append({
-					"idx": idx,
-					"a": sa,
-					"b": sb,
-					"kind": seg.get("kind", "wall")
-				})
+		var need_rays := (
+			not _has_cached_rays
+			or p_xz.distance_squared_to(_last_p_xz) > 0.0004
+			or absf(angle_difference(_last_yaw, yaw)) > 0.005
+			or player.flashlight_on != _last_flash
+			or player.is_hiding_in_locker != _last_hiding
+		)
+		if need_rays:
+			_active_seg_indices.clear()
+			var r_sq := (WORLD_RANGE + 6.0) * (WORLD_RANGE + 6.0)
+			for idx in range(wall_segments.size()):
+				var seg: Dictionary = wall_segments[idx]
+				if not _is_segment_blocking(seg):
+					continue
+				var sa: Vector2 = seg["a"]
+				var sb: Vector2 = seg["b"]
+				var closest := Geometry2D.get_closest_point_to_segment(p_xz, sa, sb)
+				if p_xz.distance_squared_to(closest) <= r_sq:
+					_active_seg_indices.append(idx)
 
-		var fan_pts := PackedVector2Array()
-		fan_pts.append(SCOPE_CENTER)
-		var hit_pts: Array[Vector2] = []
-		var hit_blocked: Array[bool] = []
-		var hit_seg_ids: Array[int] = []
-		var hit_kinds: Array[String] = []
+			var cone_max := (WORLD_RANGE - 0.5) if player.flashlight_on else 8.8
+			var periph_max := 3.4 if not player.is_hiding_in_locker else 1.8
 
-		var cone_max := (WORLD_RANGE - 0.5) if player.flashlight_on else 8.8
-		var periph_max := 3.4 if not player.is_hiding_in_locker else 1.8
+			for i in range(RAY_COUNT):
+				var rd := _ray_dirs[i]
+				var align := rd.dot(fwd_xz)
+				var ray_reach := periph_max
+				if player.is_hiding_in_locker:
+					if align > 0.72:
+						ray_reach = 11.5
+				else:
+					if align > 0.32:
+						var blend := clampf((align - 0.32) / 0.40, 0.0, 1.0)
+						ray_reach = lerpf(periph_max, cone_max, blend)
 
-		for i in range(RAY_COUNT):
-			var ang := float(i) * TAU / float(RAY_COUNT)
-			var rd := Vector2(cos(ang), sin(ang))
-			var align := rd.dot(fwd_xz)
-			var ray_reach := periph_max
-			if player.is_hiding_in_locker:
-				if align > 0.72:
-					ray_reach = 11.5
-			else:
-				if align > 0.32:
-					var blend := clampf((align - 0.32) / 0.40, 0.0, 1.0)
-					ray_reach = lerpf(periph_max, cone_max, blend)
+				var best_t := ray_reach
+				var best_id := -1
+				var best_kind := 0
+				for s_idx in _active_seg_indices:
+					var seg: Dictionary = wall_segments[s_idx]
+					var t := _ray_segment_hit(p_xz, rd, best_t, seg["a"], seg["b"])
+					if t >= 0.0 and t < best_t:
+						best_t = t
+						best_id = s_idx
+						var skind := str(seg.get("kind", "wall"))
+						best_kind = 1 if skind == "door" else (2 if skind == "vent" else 0)
 
-			var best_t := ray_reach
-			var best_id := -1
-			var best_kind := ""
-			for s in active_segs:
-				var t := _ray_segment_hit(p_xz, rd, best_t, s["a"], s["b"])
-				if t >= 0.0 and t < best_t:
-					best_t = t
-					best_id = int(s["idx"])
-					best_kind = str(s["kind"])
+				var world_end := p_xz + rd * best_t
+				var scr_pt := _world_to_scope(world_end, p_xz, cos_y, sin_y, px_per_m)
+				var off := scr_pt - SCOPE_CENTER
+				if off.length() > SCOPE_RADIUS - 1.5:
+					scr_pt = SCOPE_CENTER + off.normalized() * (SCOPE_RADIUS - 1.5)
 
-			var world_end := p_xz + rd * best_t
-			var scr_pt := _world_to_scope(world_end, p_xz, cos_y, sin_y, px_per_m)
-			var off := scr_pt - SCOPE_CENTER
-			if off.length() > SCOPE_RADIUS - 1.5:
-				scr_pt = SCOPE_CENTER + off.normalized() * (SCOPE_RADIUS - 1.5)
+				_hit_pts[i] = scr_pt
+				_hit_blocked[i] = 1 if best_id != -1 else 0
+				_hit_seg_ids[i] = best_id
+				_hit_kinds[i] = best_kind
 
-			fan_pts.append(scr_pt)
-			hit_pts.append(scr_pt)
-			hit_blocked.append(best_id != -1)
-			hit_seg_ids.append(best_id)
-			hit_kinds.append(best_kind)
+			_last_p_xz = p_xz
+			_last_yaw = yaw
+			_last_flash = player.flashlight_on
+			_last_hiding = player.is_hiding_in_locker
+			_has_cached_rays = true
 
-		fan_pts.append(fan_pts[1])
 		var cone_col := Color(COL_SODIUM, 0.075) if player.flashlight_on else Color(COL_PHOSPHOR, 0.065)
-		for i in range(1, fan_pts.size() - 1):
-			var tri := PackedVector2Array([SCOPE_CENTER, fan_pts[i], fan_pts[i + 1]])
-			draw_colored_polygon(tri, cone_col)
+		for i in range(RAY_COUNT):
+			var ni := (i + 1) % RAY_COUNT
+			_tri_pts[1] = _hit_pts[i]
+			_tri_pts[2] = _hit_pts[ni]
+			draw_colored_polygon(_tri_pts, cone_col)
 
 		# Phosphor-Etched Wall, Closed-Door & Closed-Vent Contours
 		for i in range(RAY_COUNT):
 			var ni := (i + 1) % RAY_COUNT
-			if hit_blocked[i] and hit_blocked[ni]:
-				var p1 := hit_pts[i]
-				var p2 := hit_pts[ni]
-				if hit_seg_ids[i] == hit_seg_ids[ni] or p1.distance_to(p2) <= 6.5:
-					var k := hit_kinds[i]
+			if _hit_blocked[i] != 0 and _hit_blocked[ni] != 0:
+				var p1 := _hit_pts[i]
+				var p2 := _hit_pts[ni]
+				if _hit_seg_ids[i] == _hit_seg_ids[ni] or p1.distance_to(p2) <= 6.5:
+					var k := _hit_kinds[i]
 					var col := Color(COL_PHOSPHOR, 0.90)
 					var w := 1.8
-					if k == "door":
+					if k == 1:
 						col = Color(COL_SODIUM, 0.96)
 						w = 2.4
-					elif k == "vent":
+					elif k == 2:
 						col = Color(COL_COLD, 0.94)
 						w = 2.2
 					draw_line(p1, p2, Color(col, 0.22), w + 2.2, true)
@@ -305,13 +365,11 @@ func _draw() -> void:
 					var ring_a := 0.85 if reduce_motion else clampf(1.0 - (ring_r - 7.5) / 7.0, 0.15, 0.9)
 					draw_arc(m_scr, ring_r, 0.0, TAU, 24, Color(COL_SIGNAL, ring_a), 1.5, true)
 					var d_sz := 5.5
-					var d_pts := PackedVector2Array([
-						m_scr + Vector2(0, -d_sz),
-						m_scr + Vector2(d_sz, 0),
-						m_scr + Vector2(0, d_sz),
-						m_scr + Vector2(-d_sz, 0)
-					])
-					draw_colored_polygon(d_pts, COL_SIGNAL)
+					_diamond_pts[0] = m_scr + Vector2(0, -d_sz)
+					_diamond_pts[1] = m_scr + Vector2(d_sz, 0)
+					_diamond_pts[2] = m_scr + Vector2(0, d_sz)
+					_diamond_pts[3] = m_scr + Vector2(-d_sz, 0)
+					draw_colored_polygon(_diamond_pts, COL_SIGNAL)
 					draw_circle(m_scr, 1.8, COL_PAPER)
 
 		# 5. Co-op Squad Transponder Beacons (with anti-overlap label placement)
@@ -368,21 +426,13 @@ func _draw() -> void:
 				var dir_n := off_r.normalized()
 				var tip := SCOPE_CENTER + dir_n * (SCOPE_RADIUS - 3.5)
 				var perp := Vector2(-dir_n.y, dir_n.x)
-				var chev := PackedVector2Array([
-					tip,
-					tip - dir_n * 8.0 + perp * 4.5,
-					tip - dir_n * 8.0 - perp * 4.5
-				])
-				draw_colored_polygon(chev, beacon_col)
+				_chev_pts[0] = tip
+				_chev_pts[1] = tip - dir_n * 8.0 + perp * 4.5
+				_chev_pts[2] = tip - dir_n * 8.0 - perp * 4.5
+				draw_colored_polygon(_chev_pts, beacon_col)
 				if need_help:
 					var h_r := 7.0 if reduce_motion else (6.0 + 3.0 * absf(sin(_pulse_time * 5.0)))
 					draw_arc(tip, h_r, 0.0, TAU, 16, Color(COL_SIGNAL, 0.78), 1.5, true)
 
 	# 6. Player Center Chevron (Facing Up)
-	var self_pts := PackedVector2Array([
-		SCOPE_CENTER + Vector2(0, -6.0),
-		SCOPE_CENTER + Vector2(4.4, 4.4),
-		SCOPE_CENTER + Vector2(0, 2.0),
-		SCOPE_CENTER + Vector2(-4.4, 4.4)
-	])
-	draw_colored_polygon(self_pts, COL_PAPER)
+	draw_colored_polygon(_self_pts, COL_PAPER)

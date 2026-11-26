@@ -80,7 +80,14 @@ var _door_snarl_cooldown: float = 0.0
 var _grid_baked: bool = false
 var _grid_walkable: PackedByteArray = PackedByteArray()
 var _grid_near_blocked: PackedByteArray = PackedByteArray()
+var _astar_grid: AStarGrid2D = null
 var _door_ex_rids: Array[RID] = []
+var _clear_body_cache_cd: float = 0.0
+var _clear_body_cache_res: bool = false
+var _whisker_cd: float = 0.0
+var _whisker_cached_dir: Vector3 = Vector3.ZERO
+var _whisker_last_in_dir: Vector3 = Vector3.ZERO
+var _whisker_was_clear: bool = true
 
 var _alert_snap_timer: float = 0.0
 var _alert_snap_yaw: float = 0.0
@@ -139,7 +146,14 @@ func clear_stalker() -> void:
 	_grid_baked = false
 	_grid_walkable.clear()
 	_grid_near_blocked.clear()
+	_astar_grid = null
 	_door_ex_rids.clear()
+	_clear_body_cache_cd = 0.0
+	_clear_body_cache_res = false
+	_whisker_cd = 0.0
+	_whisker_cached_dir = Vector3.ZERO
+	_whisker_last_in_dir = Vector3.ZERO
+	_whisker_was_clear = true
 	_alert_snap_timer = 0.0
 	_alert_snap_yaw = 0.0
 	_alert_flare_timer = 0.0
@@ -205,6 +219,7 @@ func spawn_stalker(
 	aura.light_color = Color(0.85, 0.12, 0.10)
 	aura.light_energy = 0.35
 	aura.omni_range = 3.4
+	aura.shadow_enabled = false
 	stalker_node.add_child(aura)
 	_aura_light = aura
 	_aura_phase = 0.0
@@ -272,6 +287,12 @@ func reset_after_catch(retreat_pos: Vector3) -> void:
 	_progress_anchor = retreat_pos
 	_wall_slide_timer = 0.0
 	_wall_slide_dir = Vector3.ZERO
+	_clear_body_cache_cd = 0.0
+	_clear_body_cache_res = false
+	_whisker_cd = 0.0
+	_whisker_cached_dir = Vector3.ZERO
+	_whisker_last_in_dir = Vector3.ZERO
+	_whisker_was_clear = true
 	state = STATE_COOLDOWN
 	_state_timer = 4.2
 	_current_path.clear()
@@ -290,15 +311,18 @@ func _find_skeleton(n: Node) -> Skeleton3D:
 
 
 func get_jumpscare_head_world_pos() -> Vector3:
-	if stalker_node == null or not is_instance_valid(stalker_node):
+	if stalker_node == null or not is_instance_valid(stalker_node) or not stalker_node.is_inside_tree():
 		return Vector3.ZERO
-	if _jumpscare_skel != null and is_instance_valid(_jumpscare_skel) and _jumpscare_head_bone >= 0:
-		return _jumpscare_skel.global_transform * _jumpscare_skel.get_bone_global_pose(_jumpscare_head_bone).origin
+	if _jumpscare_skel != null and is_instance_valid(_jumpscare_skel) and _jumpscare_skel.is_inside_tree():
+		if _jumpscare_head_bone >= 0 and _jumpscare_head_bone < _jumpscare_skel.get_bone_count():
+			return _jumpscare_skel.global_transform * _jumpscare_skel.get_bone_global_pose(_jumpscare_head_bone).origin
 	return stalker_node.global_position + Vector3(0.0, 1.72, 0.0)
 
 
 func trigger_jumpscare_pose(cam: Camera3D) -> void:
-	if stalker_node == null or not is_instance_valid(stalker_node) or cam == null or not is_instance_valid(cam):
+	if stalker_node == null or not is_instance_valid(stalker_node) or not stalker_node.is_inside_tree():
+		return
+	if cam == null or not is_instance_valid(cam) or not cam.is_inside_tree():
 		return
 	_jumpscare_active = true
 	state = STATE_COOLDOWN
@@ -322,9 +346,9 @@ func trigger_jumpscare_pose(cam: Camera3D) -> void:
 		approach_dir = approach_dir.normalized()
 
 	var ex: Array[RID] = []
-	if stalker_body != null:
+	if stalker_body != null and is_instance_valid(stalker_body):
 		ex.append(stalker_body.get_rid())
-	if local_player != null:
+	if local_player != null and is_instance_valid(local_player):
 		ex.append(local_player.get_rid())
 
 	var best_dir := approach_dir
@@ -355,17 +379,17 @@ func trigger_jumpscare_pose(cam: Camera3D) -> void:
 		local_player.rotation.y = atan2(-best_dir.x, -best_dir.z)
 		local_player._cam_trauma = 0.0
 		local_player._cam_roll = 0.0
-		if local_player.head != null:
+		if local_player.head != null and is_instance_valid(local_player.head):
 			local_player.head.rotation.x = 0.0
-		if local_player.camera != null:
+		if local_player.camera != null and is_instance_valid(local_player.camera):
 			local_player.camera.rotation = Vector3.ZERO
 			local_player.camera.position = Vector3.ZERO
 			local_player.camera.h_offset = 0.0
 			local_player.camera.v_offset = 0.0
 		local_player.force_update_transform()
-		if local_player.head != null:
+		if local_player.head != null and is_instance_valid(local_player.head):
 			local_player.head.force_update_transform()
-		if local_player.camera != null:
+		if local_player.camera != null and is_instance_valid(local_player.camera):
 			local_player.camera.force_update_transform()
 
 	var cam_pos := cam.global_position
@@ -390,11 +414,11 @@ func trigger_jumpscare_pose(cam: Camera3D) -> void:
 
 	_jumpscare_skel = _find_skeleton(stalker_node)
 	_jumpscare_head_bone = -1
-	if _jumpscare_skel != null:
+	if _jumpscare_skel != null and is_instance_valid(_jumpscare_skel) and _jumpscare_skel.is_inside_tree():
 		_jumpscare_head_bone = _jumpscare_skel.find_bone("Head")
 		if _jumpscare_head_bone < 0:
 			_jumpscare_head_bone = _jumpscare_skel.find_bone("Neck")
-		if _jumpscare_head_bone >= 0:
+		if _jumpscare_head_bone >= 0 and _jumpscare_head_bone < _jumpscare_skel.get_bone_count():
 			var head_world := _jumpscare_skel.global_transform * _jumpscare_skel.get_bone_global_pose(_jumpscare_head_bone).origin
 			stalker_node.global_position.y += (cam_pos.y - 0.04) - head_world.y
 			stalker_node.force_update_transform()
@@ -407,6 +431,7 @@ func trigger_jumpscare_pose(cam: Camera3D) -> void:
 	face_light.light_color = Color(1.0, 0.30, 0.14)
 	face_light.light_energy = 2.9
 	face_light.omni_range = 3.0
+	face_light.shadow_enabled = false
 	stalker_node.add_child(face_light)
 	_jumpscare_face_light = face_light
 
@@ -577,11 +602,11 @@ func _evaluate_hearing(world_pos: Vector3, radius: float, source_tag: String = "
 			# Lured away from a blind search by a thrown bottle or PA siren!
 			_saw_player_enter_locker_id = ""
 		else:
-			_stuck_timer = 0.0
-			_stuck_rebuilds = 0
-			_stuck_anchor_pos = stalker_node.global_position
 			_goal_pos = goal
-			_build_nav_path_to(_goal_pos)
+			if _repath_cd <= 0.0:
+				_repath_cd = 0.35
+				_last_planned_goal = _goal_pos
+				_build_nav_path_to(_goal_pos)
 			return
 
 	_listen_pause_timer = 0.0
@@ -742,7 +767,7 @@ func _pick_next_investigate_sweep_node() -> bool:
 
 
 func _physics_process(delta: float) -> void:
-	if not active or stalker_node == null:
+	if not active or stalker_node == null or not is_instance_valid(stalker_node):
 		return
 
 	_update_aura_light(delta)
@@ -751,6 +776,8 @@ func _physics_process(delta: float) -> void:
 
 	_repath_cd = maxf(0.0, _repath_cd - delta)
 	_wall_slide_timer = maxf(0.0, _wall_slide_timer - delta)
+	_clear_body_cache_cd = maxf(0.0, _clear_body_cache_cd - delta)
+	_whisker_cd = maxf(0.0, _whisker_cd - delta)
 	_update_ambient_vocals(delta)
 
 	if not NetRelay.room_code.is_empty() and not NetRelay.is_host:
@@ -832,6 +859,8 @@ func _physics_process(delta: float) -> void:
 		if state != STATE_CHASE:
 			state = STATE_CHASE
 			_repath_cd = 0.0
+			_clear_body_cache_cd = 0.0
+			_whisker_cd = 0.0
 			_progress_timer = 0.0
 			_progress_anchor = stalker_node.global_position
 			_wall_slide_timer = 0.0
@@ -839,12 +868,19 @@ func _physics_process(delta: float) -> void:
 			SynthAudio.play_3d("monster_roar", stalker_node.global_position + Vector3(0, 1.8, 0), 2.0)
 			stalker_state_changed.emit(state)
 		_state_timer = 5.0
-		if _has_line_of_sight(tpos + Vector3(0, 1.0, 0)) and _has_clear_body_path(_goal_pos):
+		var has_los := _has_line_of_sight(tpos + Vector3(0, 1.0, 0))
+		var has_clear := false
+		if has_los:
+			if _clear_body_cache_cd <= 0.0:
+				_clear_body_cache_res = _has_clear_body_path(_goal_pos)
+				_clear_body_cache_cd = 0.14
+			has_clear = _clear_body_cache_res
+		if has_los and has_clear:
 			_current_path = [_goal_pos]
 			_last_planned_goal = _goal_pos
 		else:
-			if _repath_cd <= 0.0 or _current_path.is_empty() or _last_planned_goal.distance_to(_goal_pos) > 0.75:
-				_repath_cd = 0.14
+			if _current_path.is_empty() or _repath_cd <= 0.0:
+				_repath_cd = 0.35
 				_last_planned_goal = _goal_pos
 				_build_nav_path_to(_goal_pos)
 
@@ -1078,7 +1114,7 @@ func _physics_process(delta: float) -> void:
 							tang = -tang
 					_wall_slide_dir = (tang + wn * 0.12).normalized()
 					_wall_slide_timer = 0.24
-					_repath_cd = 0.0
+					_repath_cd = minf(_repath_cd, 0.20)
 		else:
 			_progress_timer = 0.0
 			_progress_anchor = stalker_node.global_position
@@ -1214,6 +1250,8 @@ func _sense_any_survivor() -> Dictionary:
 
 
 func _can_detect_local_player() -> bool:
+	if local_player == null or not is_instance_valid(local_player) or local_player.head == null or not is_instance_valid(local_player.head):
+		return false
 	if local_player.is_hiding_in_locker:
 		return not _saw_player_enter_locker_id.is_empty()
 	if local_player.is_under_desk and local_player.is_crouching and state != STATE_CHASE:
@@ -1246,16 +1284,18 @@ func _can_detect_local_player() -> bool:
 
 
 func _has_line_of_sight(target_eye: Vector3) -> bool:
-	if stalker_node == null:
+	if stalker_node == null or not is_instance_valid(stalker_node) or not is_inside_tree() or get_world_3d() == null:
 		return false
 	var space := get_world_3d().direct_space_state
+	if space == null:
+		return false
 	var from := stalker_node.global_position + Vector3(0, 1.65, 0)
 	var q := PhysicsRayQueryParameters3D.create(from, target_eye)
 	q.collision_mask = 1 | 16
 	var ex: Array[RID] = []
-	if stalker_body != null:
+	if stalker_body != null and is_instance_valid(stalker_body):
 		ex.append(stalker_body.get_rid())
-	if local_player != null:
+	if local_player != null and is_instance_valid(local_player):
 		ex.append(local_player.get_rid())
 	for d in doors_ref:
 		if bool(d.get("is_open", false)):
@@ -1268,7 +1308,7 @@ func _has_line_of_sight(target_eye: Vector3) -> bool:
 
 
 func _has_clear_body_path(target_pos: Vector3) -> bool:
-	if stalker_node == null:
+	if stalker_node == null or not is_instance_valid(stalker_node) or not is_inside_tree() or get_world_3d() == null:
 		return false
 	var base := Vector3(stalker_node.global_position.x, 0.0, stalker_node.global_position.z)
 	var target_base := Vector3(target_pos.x, 0.0, target_pos.z)
@@ -1278,24 +1318,22 @@ func _has_clear_body_path(target_pos: Vector3) -> bool:
 	var fwd := to_t.normalized()
 	var right := Vector3(-fwd.z, 0.0, fwd.x)
 
-	var ex: Array[RID] = []
-	if stalker_body != null:
-		ex.append(stalker_body.get_rid())
-	if local_player != null:
-		ex.append(local_player.get_rid())
-	for d in doors_ref:
-		var col := d.get("collider") as CollisionObject3D
-		if col != null and is_instance_valid(col):
-			ex.append(col.get_rid())
-
 	var space := get_world_3d().direct_space_state
+	if space == null:
+		return false
+
+	var ex: Array[RID] = []
+	if stalker_body != null and is_instance_valid(stalker_body):
+		ex.append(stalker_body.get_rid())
+	if local_player != null and is_instance_valid(local_player):
+		ex.append(local_player.get_rid())
+	for drid in _door_ex_rids:
+		ex.append(drid)
+
 	var offsets: Array[Vector3] = [
-		Vector3(0.0, 0.55, 0.0),
-		Vector3(0.0, 1.35, 0.0),
-		right * -0.22 + Vector3(0.0, 0.65, 0.0),
-		right * 0.22 + Vector3(0.0, 0.65, 0.0),
-		right * -0.44 + Vector3(0.0, 0.65, 0.0),
-		right * 0.44 + Vector3(0.0, 0.65, 0.0)
+		Vector3(0.0, 0.65, 0.0),
+		right * -0.42 + Vector3(0.0, 0.65, 0.0),
+		right * 0.42 + Vector3(0.0, 0.65, 0.0)
 	]
 	for off in offsets:
 		var q := PhysicsRayQueryParameters3D.create(base + off, target_base + off)
@@ -1429,29 +1467,12 @@ func _pick_next_patrol_target() -> void:
 
 
 func _nearest_nav_idx(pos: Vector3) -> int:
-	var space := get_world_3d().direct_space_state
-	var from := Vector3(pos.x, 1.45, pos.z)
-	var ex: Array[RID] = []
-	if stalker_body != null:
-		ex.append(stalker_body.get_rid())
-	if local_player != null:
-		ex.append(local_player.get_rid())
 	var best_i := 0
-	var best_score := 999999.0
+	var best_d2 := INF
 	for i in range(nav_nodes.size()):
-		var d := pos.distance_to(nav_nodes[i])
-		var score := d
-		if d > 0.5 and d < 18.0:
-			var q := PhysicsRayQueryParameters3D.create(from, Vector3(nav_nodes[i].x, 1.45, nav_nodes[i].z))
-			q.collision_mask = 1
-			q.exclude = ex
-			var hit := space.intersect_ray(q)
-			if not hit.is_empty():
-				var col := hit.get("collider") as Node
-				if col == null or str(col.get_meta("interact_type", "")) != "door":
-					score += 25.0
-		if score < best_score:
-			best_score = score
+		var d2 := pos.distance_squared_to(nav_nodes[i])
+		if d2 < best_d2:
+			best_d2 = d2
 			best_i = i
 	return best_i
 
@@ -1574,6 +1595,23 @@ func _bake_walkability_grid() -> void:
 					break
 			_grid_near_blocked[idx] = near
 
+	_astar_grid = AStarGrid2D.new()
+	_astar_grid.region = Rect2i(0, 0, GRID_W, GRID_H)
+	_astar_grid.cell_size = Vector2(GRID_CELL, GRID_CELL)
+	_astar_grid.diagonal_mode = AStarGrid2D.DIAGONAL_MODE_ONLY_IF_NO_OBSTACLES
+	_astar_grid.default_compute_heuristic = AStarGrid2D.HEURISTIC_OCTILE
+	_astar_grid.default_estimate_heuristic = AStarGrid2D.HEURISTIC_OCTILE
+	_astar_grid.update()
+
+	for gz in range(GRID_H):
+		for gx in range(GRID_W):
+			var idx := gz * GRID_W + gx
+			var cell := Vector2i(gx, gz)
+			if _grid_walkable[idx] == 0:
+				_astar_grid.set_point_solid(cell, true)
+			elif _grid_near_blocked[idx] != 0:
+				_astar_grid.set_point_weight_scale(cell, 1.8)
+
 	_grid_baked = true
 
 
@@ -1599,52 +1637,6 @@ func _find_nearest_walkable_cell(cell: Vector2i, max_radius: int = 4) -> Vector2
 		if best.x >= 0:
 			return best
 	return Vector2i(-1, -1)
-
-
-func _astar_heap_push(heap_idx: Array[int], heap_f: Array[float], node_idx: int, f_val: float) -> void:
-	heap_idx.append(node_idx)
-	heap_f.append(f_val)
-	var i := heap_idx.size() - 1
-	while i > 0:
-		var p := (i - 1) >> 1
-		if heap_f[p] <= heap_f[i]:
-			break
-		var ti := heap_idx[p]
-		var tf := heap_f[p]
-		heap_idx[p] = heap_idx[i]
-		heap_f[p] = heap_f[i]
-		heap_idx[i] = ti
-		heap_f[i] = tf
-		i = p
-
-
-func _astar_heap_pop(heap_idx: Array[int], heap_f: Array[float]) -> int:
-	var top := heap_idx[0]
-	var last_i: int = int(heap_idx.pop_back())
-	var last_f: float = float(heap_f.pop_back())
-	var sz := heap_idx.size()
-	if sz > 0:
-		heap_idx[0] = last_i
-		heap_f[0] = last_f
-		var i := 0
-		while true:
-			var l := i * 2 + 1
-			if l >= sz:
-				break
-			var r := l + 1
-			var smallest := l
-			if r < sz and heap_f[r] < heap_f[l]:
-				smallest = r
-			if heap_f[i] <= heap_f[smallest]:
-				break
-			var ti := heap_idx[i]
-			var tf := heap_f[i]
-			heap_idx[i] = heap_idx[smallest]
-			heap_f[i] = heap_f[smallest]
-			heap_idx[smallest] = ti
-			heap_f[smallest] = tf
-			i = smallest
-	return top
 
 
 func _grid_line_walkable(a: Vector2i, b: Vector2i) -> bool:
@@ -1686,7 +1678,7 @@ func _grid_line_walkable(a: Vector2i, b: Vector2i) -> bool:
 
 func _build_grid_path(start_pos: Vector3, dest_pos: Vector3) -> Array[Vector3]:
 	var out: Array[Vector3] = []
-	if not _grid_baked:
+	if not _grid_baked or _astar_grid == null:
 		return out
 	var raw_goal_cell := _world_to_grid(dest_pos)
 	var s_cell := _find_nearest_walkable_cell(_world_to_grid(start_pos), 4)
@@ -1700,77 +1692,9 @@ func _build_grid_path(start_pos: Vector3, dest_pos: Vector3) -> Array[Vector3]:
 		out.append(goal_world if (raw_goal_walkable or _has_clear_body_path(goal_world)) else _grid_to_world(g_cell.x, g_cell.y))
 		return out
 
-	var total := GRID_W * GRID_H
-	var g_score := PackedFloat32Array()
-	g_score.resize(total)
-	g_score.fill(1e9)
-	var parent := PackedInt32Array()
-	parent.resize(total)
-	parent.fill(-1)
-	var closed := PackedByteArray()
-	closed.resize(total)
-	closed.fill(0)
-
-	var s_idx := s_cell.y * GRID_W + s_cell.x
-	var g_idx := g_cell.y * GRID_W + g_cell.x
-	g_score[s_idx] = 0.0
-
-	var heap_idx: Array[int] = []
-	var heap_f: Array[float] = []
-	var h0_dx := absf(float(g_cell.x - s_cell.x))
-	var h0_dz := absf(float(g_cell.y - s_cell.y))
-	_astar_heap_push(heap_idx, heap_f, s_idx, (h0_dx + h0_dz) + (1.4142135 - 2.0) * minf(h0_dx, h0_dz))
-
-	var dir_x: Array[int] = [-1, 0, 1, -1, 1, -1, 0, 1]
-	var dir_z: Array[int] = [-1, -1, -1, 0, 0, 1, 1, 1]
-	var dir_c: Array[float] = [1.4142135, 1.0, 1.4142135, 1.0, 1.0, 1.4142135, 1.0, 1.4142135]
-
-	var found := false
-	while not heap_idx.is_empty():
-		var cur := _astar_heap_pop(heap_idx, heap_f)
-		if cur == g_idx:
-			found = true
-			break
-		if closed[cur] != 0:
-			continue
-		closed[cur] = 1
-
-		var cx := cur % GRID_W
-		var cz := floori(float(cur) / float(GRID_W))
-		var cur_g := g_score[cur]
-
-		for k in range(8):
-			var dx := dir_x[k]
-			var dz := dir_z[k]
-			var nx := cx + dx
-			var nz := cz + dz
-			if nx < 0 or nx >= GRID_W or nz < 0 or nz >= GRID_H:
-				continue
-			var n_idx := nz * GRID_W + nx
-			if _grid_walkable[n_idx] == 0 or closed[n_idx] != 0:
-				continue
-			if dx != 0 and dz != 0:
-				if _grid_walkable[cz * GRID_W + nx] == 0 or _grid_walkable[nz * GRID_W + cx] == 0:
-					continue
-			var step_cost := dir_c[k] + (0.8 if _grid_near_blocked[n_idx] != 0 else 0.0)
-			var ng := cur_g + step_cost
-			if ng < g_score[n_idx]:
-				g_score[n_idx] = ng
-				parent[n_idx] = cur
-				var hdx := absf(float(g_cell.x - nx))
-				var hdz := absf(float(g_cell.y - nz))
-				var h := (hdx + hdz) + (1.4142135 - 2.0) * minf(hdx, hdz)
-				_astar_heap_push(heap_idx, heap_f, n_idx, ng + h)
-
-	if not found:
+	var cells: Array[Vector2i] = _astar_grid.get_id_path(s_cell, g_cell)
+	if cells.is_empty():
 		return out
-
-	var cells: Array[Vector2i] = []
-	var trace := g_idx
-	while trace != -1:
-		cells.append(Vector2i(trace % GRID_W, floori(float(trace) / float(GRID_W))))
-		trace = parent[trace]
-	cells.reverse()
 
 	var smoothed: Array[Vector2i] = []
 	var anchor := 0
@@ -1797,17 +1721,19 @@ func _build_grid_path(start_pos: Vector3, dest_pos: Vector3) -> Array[Vector3]:
 
 
 func _steer_with_whiskers(desired_dir: Vector3) -> Vector3:
-	if stalker_node == null or not is_inside_tree() or get_world_3d() == null:
+	if stalker_node == null or not is_instance_valid(stalker_node) or not is_inside_tree() or get_world_3d() == null:
 		return desired_dir
+	if _whisker_cd > 0.0 and _whisker_last_in_dir.dot(desired_dir) > 0.92:
+		return desired_dir if _whisker_was_clear else _whisker_cached_dir
 	var space := get_world_3d().direct_space_state
 	if space == null:
 		return desired_dir
 
 	var origin := Vector3(stalker_node.global_position.x, 0.65, stalker_node.global_position.z)
 	var ex: Array[RID] = []
-	if stalker_body != null:
+	if stalker_body != null and is_instance_valid(stalker_body):
 		ex.append(stalker_body.get_rid())
-	if local_player != null:
+	if local_player != null and is_instance_valid(local_player):
 		ex.append(local_player.get_rid())
 	for drid in _door_ex_rids:
 		ex.append(drid)
@@ -1827,7 +1753,12 @@ func _steer_with_whiskers(desired_dir: Vector3) -> Vector3:
 			var hit_pos: Vector3 = hit["position"]
 			clears[i] = clampf(origin.distance_to(hit_pos) / feeler_len, 0.0, 1.0)
 
+	_whisker_cd = 0.08
+	_whisker_last_in_dir = desired_dir
+
 	if clears[0] >= 0.99 and clears[1] >= 0.99 and clears[2] >= 0.99:
+		_whisker_was_clear = true
+		_whisker_cached_dir = desired_dir
 		return desired_dir
 
 	var right_vec := Vector3(-desired_dir.z, 0.0, desired_dir.x)
@@ -1843,8 +1774,12 @@ func _steer_with_whiskers(desired_dir: Vector3) -> Vector3:
 	var steered := desired_dir + right_vec * push
 	steered.y = 0.0
 	if steered.length_squared() < 0.0001:
+		_whisker_was_clear = true
+		_whisker_cached_dir = desired_dir
 		return desired_dir
-	return steered.normalized()
+	_whisker_was_clear = false
+	_whisker_cached_dir = steered.normalized()
+	return _whisker_cached_dir
 
 
 func _generate_search_points(origin: Vector3, count: int) -> Array[Vector3]:

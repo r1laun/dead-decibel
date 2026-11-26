@@ -53,6 +53,9 @@ var _tut_prev_inv_count: int = 0
 
 
 func _ready() -> void:
+	if OS.get_name() in ["Android", "iOS"]:
+		DisplayServer.screen_set_orientation(DisplayServer.SCREEN_SENSOR_LANDSCAPE)
+
 	world_container = Node3D.new()
 	world_container.name = "WorldContainer"
 	add_child(world_container)
@@ -900,13 +903,13 @@ func _update_sound_hazards_and_pa(delta: float) -> void:
 # 5. TIME-FREE WOUNDS, SURGICAL HOLDING CAGE & CO-OP TEAMMATE RESCUE
 # ===========================================================================
 func _reset_player_jumpscare_camera() -> void:
-	if player == null:
+	if player == null or not is_instance_valid(player):
 		return
 	player._cam_trauma = 0.0
 	player._cam_roll = 0.0
-	if player.head != null:
+	if player.head != null and is_instance_valid(player.head):
 		player.head.rotation.x = 0.0
-	if player.camera != null:
+	if player.camera != null and is_instance_valid(player.camera):
 		player.camera.fov = ListenerPlayer.BASE_FOV
 		player.camera.position = Vector3.ZERO
 		player.camera.rotation = Vector3.ZERO
@@ -926,7 +929,7 @@ func _play_catch_jumpscare() -> void:
 			return
 		var dt := get_process_delta_time()
 		elapsed += dt
-		if player != null and player.camera != null:
+		if player != null and is_instance_valid(player) and player.camera != null and is_instance_valid(player.camera) and player.camera.is_inside_tree():
 			if SaveState.reduce_motion:
 				player.camera.fov = 50.0
 			else:
@@ -935,9 +938,15 @@ func _play_catch_jumpscare() -> void:
 				player.camera.fov = lerpf(ListenerPlayer.BASE_FOV, 50.0, ease_out)
 			player.camera.h_offset = 0.0
 			player.camera.v_offset = 0.0
-			var head_target := monster_director.get_jumpscare_head_world_pos()
-			if head_target.distance_squared_to(player.camera.global_position) > 0.001:
-				player.camera.look_at(head_target, Vector3.UP)
+			if monster_director != null and is_instance_valid(monster_director) and monster_director.stalker_node != null and is_instance_valid(monster_director.stalker_node):
+				var head_target := monster_director.get_jumpscare_head_world_pos()
+				var to_head := head_target - player.camera.global_position
+				if to_head.length_squared() > 0.001:
+					var dir := to_head.normalized()
+					var up_vec := Vector3.UP
+					if absf(dir.dot(Vector3.UP)) > 0.99:
+						up_vec = Vector3.FORWARD if absf(dir.dot(Vector3.FORWARD)) <= 0.99 else Vector3.RIGHT
+					player.camera.look_at(head_target, up_vec)
 			if not SaveState.reduce_motion:
 				var decay := 1.0 - 0.35 * clampf(elapsed / duration, 0.0, 1.0)
 				var pitch_shake := clampf((sin(elapsed * 53.0) * 0.018 + rng.randf_range(-0.007, 0.007)) * decay, -0.03, 0.03)
@@ -950,7 +959,7 @@ func _play_catch_jumpscare() -> void:
 
 
 func _on_local_player_caught() -> void:
-	if phase != Phase.PLAYING or _jumpscare_active or player.is_downed or player.is_dead:
+	if phase != Phase.PLAYING or _jumpscare_active or player == null or not is_instance_valid(player) or player.is_downed or player.is_dead:
 		return
 	for lid in _lockers.keys():
 		var lk_item: Dictionary = _lockers[lid]
@@ -965,16 +974,18 @@ func _on_local_player_caught() -> void:
 
 	SynthAudio.play_2d("jumpscare_screech", 3.5)
 	SynthAudio.play_2d("catch_slam", 3.0)
-	monster_director.trigger_jumpscare_pose(player.camera)
+	if monster_director != null and is_instance_valid(monster_director) and player.camera != null and is_instance_valid(player.camera):
+		monster_director.trigger_jumpscare_pose(player.camera)
 	hud.play_jumpscare_flash(0.85)
 	if SaveState.haptics_enabled and OS.get_name() == "Android":
 		Input.vibrate_handheld(260)
 
 	await _play_catch_jumpscare()
-	if not is_inside_tree():
+	if not is_inside_tree() or not is_instance_valid(player):
 		return
 
-	monster_director.end_jumpscare_pose()
+	if monster_director != null and is_instance_valid(monster_director):
+		monster_director.end_jumpscare_pose()
 	_reset_player_jumpscare_camera()
 	_jumpscare_active = false
 

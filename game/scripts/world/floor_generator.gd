@@ -409,7 +409,7 @@ static func _add_wall_with_vent(
 	}
 
 
-static func _add_ceiling_lamp(parent: Node3D, pos: Vector3, col: Color, energy: float, rng_range: float, flicker: bool, lights_out: Array[Dictionary], with_fixture: bool = true) -> void:
+static func _add_ceiling_lamp(parent: Node3D, pos: Vector3, col: Color, energy: float, rng_range: float, flicker: bool, lights_out: Array[Dictionary], with_fixture: bool = true, distance_fade: bool = true) -> void:
 	if with_fixture:
 		var m_dado := AssetLibrary.get_world_material("dado_strip")
 		_add_visual_box(parent, Vector3(0.46, 0.06, 0.46), Vector3(pos.x, WALL_H - 0.03, pos.z), m_dado)
@@ -423,6 +423,11 @@ static func _add_ceiling_lamp(parent: Node3D, pos: Vector3, col: Color, energy: 
 	omni.light_energy = energy
 	omni.omni_range = rng_range
 	omni.omni_attenuation = 1.28
+	omni.shadow_enabled = false
+	if distance_fade:
+		omni.distance_fade_enabled = true
+		omni.distance_fade_begin = 16.0
+		omni.distance_fade_length = 6.0
 	parent.add_child(omni)
 
 	if flicker:
@@ -630,6 +635,10 @@ static func _add_bio_cylinder(parent: Node3D, pos: Vector3, with_light: bool = f
 		bl.light_energy = 0.72
 		bl.omni_range = 5.4
 		bl.omni_attenuation = 1.35
+		bl.shadow_enabled = false
+		bl.distance_fade_enabled = true
+		bl.distance_fade_begin = 16.0
+		bl.distance_fade_length = 6.0
 		holder.add_child(bl)
 
 	if add_collider:
@@ -752,9 +761,9 @@ static func build_menu_diorama(parent: Node3D) -> Dictionary:
 
 	# Dramatic 3-point horror corridor lighting (warm sodium foreground + cold cyan rim + crimson airlock)
 	var flicker_lights: Array[Dictionary] = []
-	_add_ceiling_lamp(root, Vector3(-0.2, 0.0, -0.35), Color(1.0, 0.68, 0.30), 1.05, 8.2, false, flicker_lights, false)
-	_add_ceiling_lamp(root, Vector3(0.85, 0.0, -4.45), Color(0.52, 0.86, 0.96), 1.35, 8.0, false, flicker_lights, true)
-	_add_ceiling_lamp(root, Vector3(0.0, 0.0, -8.45), Color(1.0, 0.18, 0.14), 1.85, 10.5, true, flicker_lights, true)
+	_add_ceiling_lamp(root, Vector3(-0.2, 0.0, -0.35), Color(1.0, 0.68, 0.30), 1.05, 8.2, false, flicker_lights, false, false)
+	_add_ceiling_lamp(root, Vector3(0.85, 0.0, -4.45), Color(0.52, 0.86, 0.96), 1.35, 8.0, false, flicker_lights, true, false)
+	_add_ceiling_lamp(root, Vector3(0.0, 0.0, -8.45), Color(1.0, 0.18, 0.14), 1.85, 10.5, true, flicker_lights, true, false)
 
 	# Dedicated rim/key SpotLight sculpting Listener-07 silhouette and right-wall stencil
 	var key_spot := SpotLight3D.new()

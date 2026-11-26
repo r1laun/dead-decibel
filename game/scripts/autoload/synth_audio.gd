@@ -5,10 +5,13 @@ const SAMPLE_RATE := 22050
 var clips: Dictionary = {}
 var _pool_2d: Array[AudioStreamPlayer] = []
 var _pool_3d: Array[AudioStreamPlayer3D] = []
+var _pool_2d_cursor: int = 0
+var _pool_3d_cursor: int = 0
 var _drone_player: AudioStreamPlayer = null
 var _menu_music_player: AudioStreamPlayer = null
 var _chase_music_player: AudioStreamPlayer = null
 var _heartbeat_timer: float = 0.0
+var _haptic_cd: float = 0.0
 
 
 func _ready() -> void:
@@ -50,10 +53,10 @@ func _ready() -> void:
 
 
 func set_menu_music(enabled: bool) -> void:
-	if DisplayServer.get_name() == "headless" or _menu_music_player == null:
+	if DisplayServer.get_name() == "headless" or _menu_music_player == null or not is_instance_valid(_menu_music_player):
 		return
 	if enabled:
-		if _chase_music_player != null and _chase_music_player.playing:
+		if _chase_music_player != null and is_instance_valid(_chase_music_player) and _chase_music_player.playing:
 			_chase_music_player.stop()
 			_chase_music_player.volume_db = -80.0
 			_chase_music_player.pitch_scale = 1.0
@@ -696,40 +699,47 @@ func _build_all_clips() -> void:
 
 
 func play_2d(clip_name: String, vol_db: float = 0.0, pitch: float = 1.0) -> void:
-	if DisplayServer.get_name() == "headless" or not clips.has(clip_name):
+	if DisplayServer.get_name() == "headless" or _pool_2d.is_empty() or not clips.has(clip_name):
 		return
 	for p in _pool_2d:
-		if not p.playing:
+		if is_instance_valid(p) and not p.playing:
 			p.stream = clips[clip_name]
 			p.volume_db = vol_db
 			p.pitch_scale = pitch
 			p.play()
 			return
-	_pool_2d[0].stream = clips[clip_name]
-	_pool_2d[0].volume_db = vol_db
-	_pool_2d[0].pitch_scale = pitch
-	_pool_2d[0].play()
+	var fallback := _pool_2d[_pool_2d_cursor % _pool_2d.size()]
+	_pool_2d_cursor = (_pool_2d_cursor + 1) % _pool_2d.size()
+	if is_instance_valid(fallback):
+		fallback.stream = clips[clip_name]
+		fallback.volume_db = vol_db
+		fallback.pitch_scale = pitch
+		fallback.play()
 
 
 func play_3d(clip_name: String, pos: Vector3, vol_db: float = 0.0, pitch: float = 1.0) -> void:
-	if DisplayServer.get_name() == "headless" or not clips.has(clip_name):
+	if DisplayServer.get_name() == "headless" or _pool_3d.is_empty() or not clips.has(clip_name):
 		return
 	for p in _pool_3d:
-		if not p.playing:
+		if is_instance_valid(p) and not p.playing:
 			p.global_position = pos
 			p.stream = clips[clip_name]
 			p.volume_db = vol_db
 			p.pitch_scale = pitch
 			p.play()
 			return
-	_pool_3d[0].global_position = pos
-	_pool_3d[0].stream = clips[clip_name]
-	_pool_3d[0].volume_db = vol_db
-	_pool_3d[0].pitch_scale = pitch
-	_pool_3d[0].play()
+	var fallback := _pool_3d[_pool_3d_cursor % _pool_3d.size()]
+	_pool_3d_cursor = (_pool_3d_cursor + 1) % _pool_3d.size()
+	if is_instance_valid(fallback):
+		fallback.global_position = pos
+		fallback.stream = clips[clip_name]
+		fallback.volume_db = vol_db
+		fallback.pitch_scale = pitch
+		fallback.play()
 
 
 func update_tension_heartbeat(delta: float, monster_dist: float, in_chase: bool) -> void:
+	_haptic_cd = maxf(0.0, _haptic_cd - maxf(delta, 0.0))
 	if monster_dist > 18.0 and not in_chase:
 		_heartbeat_timer = 0.0
 		return
@@ -741,13 +751,15 @@ func update_tension_heartbeat(delta: float, monster_dist: float, in_chase: bool)
 	if _heartbeat_timer <= 0.0:
 		_heartbeat_timer = interval
 		play_2d("heartbeat", lerpf(-14.0, -2.0, closeness), lerpf(0.95, 1.15, closeness))
-		if SaveState.haptics_enabled and OS.get_name() == "Android" and closeness > 0.55:
-			Input.vibrate_handheld(int(35.0 * closeness))
+		if SaveState.haptics_enabled and OS.get_name() == "Android" and closeness > 0.55 and _haptic_cd <= 0.0:
+			_haptic_cd = 0.60
+			Input.vibrate_handheld(maxi(25, int(35.0 * closeness)))
 
 
 func update_chase_music(delta: float, in_chase: bool, monster_dist: float) -> void:
-	if DisplayServer.get_name() == "headless" or _chase_music_player == null:
+	if DisplayServer.get_name() == "headless" or _chase_music_player == null or not is_instance_valid(_chase_music_player) or _chase_music_player.stream == null:
 		return
+	var safe_delta := maxf(delta, 0.0)
 	if in_chase:
 		var prox := clampf(1.0 - (monster_dist / 14.0), 0.0, 1.0)
 		var target_vol := lerpf(-9.5, -5.5, prox)
@@ -756,18 +768,18 @@ func update_chase_music(delta: float, in_chase: bool, monster_dist: float) -> vo
 			_chase_music_player.volume_db = -24.0
 			_chase_music_player.pitch_scale = target_pitch
 			_chase_music_player.play()
-		var alpha := 1.0 - exp(-delta * 10.0)
+		var alpha := 1.0 - exp(-safe_delta * 10.0)
 		_chase_music_player.volume_db = lerpf(_chase_music_player.volume_db, target_vol, alpha)
 		_chase_music_player.pitch_scale = lerpf(_chase_music_player.pitch_scale, target_pitch, alpha)
 	else:
 		if _chase_music_player.playing:
-			if delta >= 0.9:
+			if safe_delta >= 0.9:
 				_chase_music_player.stop()
 				_chase_music_player.volume_db = -80.0
 				_chase_music_player.pitch_scale = 1.0
 				return
-			_chase_music_player.volume_db = move_toward(_chase_music_player.volume_db, -60.0, delta * 30.0)
-			_chase_music_player.pitch_scale = lerpf(_chase_music_player.pitch_scale, 1.0, 1.0 - exp(-delta * 3.0))
+			_chase_music_player.volume_db = move_toward(_chase_music_player.volume_db, -60.0, safe_delta * 30.0)
+			_chase_music_player.pitch_scale = lerpf(_chase_music_player.pitch_scale, 1.0, 1.0 - exp(-safe_delta * 3.0))
 			if _chase_music_player.volume_db <= -59.5:
 				_chase_music_player.stop()
 				_chase_music_player.volume_db = -80.0

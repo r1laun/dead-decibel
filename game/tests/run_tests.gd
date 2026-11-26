@@ -791,6 +791,104 @@ func _run_all_tests() -> void:
 	_assert(not has_em_dash and keys_match, "Loc.STRINGS EN & RU have identical keys and 0 em-dashes")
 	_assert(en_title_ok and ru_title_ok and en_sub_lines and ru_sub_lines, "GAME_TITLE & 2-line GAME_SUBTITLE intact in EN & RU")
 
+	# 14. v4.2.1 Regression Tests: Strict Landscape, Touch Sprint Threshold, Sustained Chase + Noise Stress
+	var orient_val := int(ProjectSettings.get_setting("display/window/handheld/orientation", -1))
+	_assert(orient_val == 4, "ProjectSettings display/window/handheld/orientation == 4 (Sensor Landscape, got %d)" % orient_val)
+	_assert(is_equal_approx(ListenerPlayer.TOUCH_SPRINT_THRESHOLD, 0.90), "ListenerPlayer.TOUCH_SPRINT_THRESHOLD == 0.90 (got %.2f)" % ListenerPlayer.TOUCH_SPRINT_THRESHOLD)
+
+	# 14b. Touch Joystick walk vs sprint threshold verification (0.85 stays walk, 0.95 triggers sprint)
+	session.start_match(77707, SaveState.DIFF_PRACTICE)
+	await get_tree().physics_frame
+	var tp: ListenerPlayer = session.player
+	tp.controls_enabled = true
+	tp.is_crouching = false
+	tp.is_under_desk = false
+	tp.is_holding_breath = false
+	tp.is_hiding_in_locker = false
+	tp.is_caged = false
+	tp.is_downed = false
+	tp.is_dead = false
+	tp.wounds = 0
+	tp.adrenaline_timer = 0.0
+	tp.global_position = Vector3(-4.2, 0.08, 2.8)
+	tp.rotation.y = 0.0
+	tp.velocity = Vector3.ZERO
+	tp.touch_move_vec = Vector2(0.0, -0.85)
+	tp.touch_sprinting = true # Even if flag is set, 0.85 pull must clamp to walk speed
+	for _wi in range(25):
+		await get_tree().physics_frame
+	var walk_speed_85 := Vector2(tp.velocity.x, tp.velocity.z).length()
+	_assert(walk_speed_85 > 1.5 and walk_speed_85 <= ListenerPlayer.WALK_SPEED + 0.05, "Touch joystick pull 0.85 stays in walk speed (%.2f m/s <= %.2f)" % [walk_speed_85, ListenerPlayer.WALK_SPEED + 0.05])
+
+	tp.global_position = Vector3(-4.2, 0.08, 2.8)
+	tp.velocity = Vector3.ZERO
+	tp.touch_move_vec = Vector2(0.0, -0.95)
+	tp.touch_sprinting = true
+	for _si in range(25):
+		await get_tree().physics_frame
+	var sprint_speed_95 := Vector2(tp.velocity.x, tp.velocity.z).length()
+	tp.touch_move_vec = Vector2.ZERO
+	tp.touch_sprinting = false
+	tp.velocity = Vector3.ZERO
+	_assert(sprint_speed_95 > ListenerPlayer.WALK_SPEED + 0.50, "Touch joystick pull 0.95 triggers sprint speed (%.2f m/s > %.2f)" % [sprint_speed_95, ListenerPlayer.WALK_SPEED + 0.50])
+
+	# 14c. Sustained chase + continuous-noise stress test (120 physics steps across rooms/doorways)
+	session.start_match(77707, SaveState.DIFF_NORMAL)
+	await get_tree().physics_frame
+	await get_tree().physics_frame
+	md = session.monster_director
+	if not md._grid_baked:
+		md._bake_walkability_grid()
+	_assert(md._astar_grid != null and md._astar_grid is AStarGrid2D, "MonsterDirector C++ AStarGrid2D instance active")
+
+	session.player.controls_enabled = false
+	session.player.velocity = Vector3.ZERO
+	session.player.is_crouching = false
+	session.player.is_hiding_in_locker = false
+	session.player.is_under_desk = false
+	session.player.is_downed = false
+	session.player.is_dead = false
+	session.player.flashlight_on = true
+	session.player.global_position = Vector3(-1.5, 0.08, 0.0)
+	session.player.force_update_transform()
+
+	md.stalker_body.global_position = Vector3(-15.6, 0.0, 2.2)
+	md.stalker_body.velocity = Vector3.ZERO
+	md.stalker_body.force_update_transform()
+	md.state = MonsterDirector.STATE_CHASE
+	md._state_timer = 15.0
+	md._echolocate_cooldown = 99.0
+	md._listen_pause_timer = 0.0
+	md._alert_snap_timer = 0.0
+	md._stuck_timer = 0.0
+	md._stuck_rebuilds = 0
+	md._stuck_anchor_pos = md.stalker_body.global_position
+	md._progress_timer = 0.0
+	md._progress_anchor = md.stalker_body.global_position
+	md._wall_slide_timer = 0.0
+	md._goal_pos = session.player.global_position
+	md._build_nav_path_to(md._goal_pos)
+
+	var stress_start_pos := md.stalker_body.global_position
+	var min_step_speed := 999.0
+	var moving_steps := 0
+	var t_stress_start := Time.get_ticks_usec()
+	for step_i in range(120):
+		if step_i % 6 == 0:
+			var noise_p := Vector3(-1.5 + sin(float(step_i) * 0.1) * 1.2, 0.08, cos(float(step_i) * 0.1) * 1.2)
+			session.player.global_position = noise_p
+			AcousticBus.emit_noise(noise_p, 14.0, 0.85, "step")
+		md._physics_process(1.0 / 60.0)
+		var spd_2d := Vector2(md.stalker_body.velocity.x, md.stalker_body.velocity.z).length()
+		if spd_2d > 1.0:
+			moving_steps += 1
+		if step_i >= 10:
+			min_step_speed = minf(min_step_speed, spd_2d)
+	var stress_elapsed_ms := float(Time.get_ticks_usec() - t_stress_start) / 1000.0
+	var stress_dist := Vector2(md.stalker_body.global_position.x - stress_start_pos.x, md.stalker_body.global_position.z - stress_start_pos.z).length()
+	_assert(stress_elapsed_ms < 500.0, "120-step sustained chase + continuous noise stress test completes in %.2f ms (< 500ms)" % stress_elapsed_ms)
+	_assert(moving_steps >= 110 and min_step_speed > 1.5 and stress_dist > 5.0, "Monster stays moving smoothly across rooms/doorways under continuous noise (moving=%d/120, min_spd=%.2f, dist=%.2fm)" % [moving_steps, min_step_speed, stress_dist])
+
 	var ws_port := OS.get_environment("ECHO7_LIVE_WS_PORT")
 	if not ws_port.is_empty():
 		SaveState.relay_url = "ws://127.0.0.1:" + ws_port
