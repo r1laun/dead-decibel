@@ -8,17 +8,17 @@ signal toggle_dossier_requested
 signal inventory_changed
 signal consumable_used(toast_key: String)
 
-const WALK_SPEED := 3.55
-const SPRINT_SPEED := 5.65
-const CROUCH_SPEED := 1.92
-const DOWNED_SPEED := 0.95
+const WALK_SPEED := 3.65
+const SPRINT_SPEED := 6.20
+const CROUCH_SPEED := 2.05
+const DOWNED_SPEED := 1.05
 const GRAVITY := 18.0
 const MAX_SLOTS := 5
 
 const BASE_FOV := 74.0
 const SPRINT_FOV := 79.0
 const CROUCH_FOV := 70.0
-const FOCUS_FOV := 68.0
+const FOCUS_FOV := 66.0
 const MOVE_ACCEL := 18.0
 const MOVE_DECEL := 14.5
 const JOY_DEADZONE_MOVE := 0.18
@@ -81,9 +81,15 @@ var _flash_flicker_t: float = 0.0
 var _joy_sprint_toggled: bool = false
 var _was_moving_for_sprint: bool = false
 var _joy_rt_held: bool = false
+var _cage_wakeup_timer: float = 0.0
+var _cage_wakeup_duration: float = 2.2
+var _chase_tension: float = 0.0
 
 
 func _ready() -> void:
+	collision_layer = 2
+	collision_mask = 1 | 16
+
 	col_shape = CollisionShape3D.new()
 	capsule = CapsuleShape3D.new()
 	capsule.radius = 0.34
@@ -109,10 +115,7 @@ func _ready() -> void:
 	flashlight.spot_range = 19.5
 	flashlight.spot_angle = 37.0
 	flashlight.spot_attenuation = 1.32
-	flashlight.shadow_enabled = true
-	flashlight.shadow_bias = 0.28
-	flashlight.shadow_normal_bias = 4.0
-	flashlight.shadow_blur = 2.2
+	flashlight.shadow_enabled = false
 	flashlight.light_cull_mask = 1
 	flashlight.position = Vector3(0.14, -0.10, -0.12)
 	camera.add_child(flashlight)
@@ -170,12 +173,17 @@ func reset_for_new_day(spawn_pos: Vector3, clear_items: bool = false) -> void:
 	_joy_sprint_toggled = false
 	_was_moving_for_sprint = false
 	_joy_rt_held = false
+	_cage_wakeup_timer = 0.0
+	_cage_wakeup_duration = 2.2
+	_chase_tension = 0.0
 	_flash_aim_yaw = rotation.y
 	_flash_aim_pitch = head.rotation.x
 	camera.position = Vector3.ZERO
 	camera.rotation.z = 0.0
 	camera.fov = BASE_FOV
 	flashlight.rotation = Vector3.ZERO
+	ambient_fill.light_energy = 0.24
+	ambient_fill.omni_range = 3.8
 	if clear_items:
 		wounds = 0
 		is_caged = false
@@ -192,6 +200,33 @@ func add_camera_trauma(amount: float) -> void:
 	if SaveState.reduce_motion:
 		return
 	_cam_trauma = clampf(_cam_trauma + amount, 0.0, 1.0)
+
+
+func set_chase_tension(in_chase: bool, monster_dist: float) -> void:
+	if not in_chase or monster_dist >= 14.0 or SaveState.reduce_motion:
+		_chase_tension = 0.0
+		return
+	_chase_tension = clampf(1.0 - (monster_dist / 14.0), 0.0, 1.0)
+
+
+func start_cage_wakeup(duration: float = 2.2) -> void:
+	if DisplayServer.get_name() == "headless" or duration <= 0.05:
+		_cage_wakeup_timer = 0.0
+		head.position.y = 1.56
+		head.rotation.x = 0.0
+		_cam_roll = 0.0
+		camera.rotation.z = 0.0
+		return
+	_cage_wakeup_duration = maxf(0.1, duration)
+	_cage_wakeup_timer = _cage_wakeup_duration
+	head.position.y = 0.36
+	head.rotation.x = -0.22
+	if SaveState.reduce_motion:
+		_cam_roll = 0.0
+		camera.rotation.z = 0.0
+	else:
+		_cam_roll = 0.24
+		camera.rotation.z = 0.24
 
 
 func get_equipped_item() -> String:
@@ -608,6 +643,12 @@ func _update_flashlight_visuals(delta: float) -> void:
 		if battery_charge < 0.30:
 			battery_charge = minf(0.30, battery_charge + delta * 0.018)
 
+	var target_fill_energy := 0.50 if is_hiding_in_locker else 0.24
+	var target_fill_range := 8.0 if is_hiding_in_locker else 3.8
+	var fill_alpha := 1.0 - exp(-delta * 6.0)
+	ambient_fill.light_energy = lerpf(ambient_fill.light_energy, target_fill_energy, fill_alpha)
+	ambient_fill.omni_range = lerpf(ambient_fill.omni_range, target_fill_range, fill_alpha)
+
 
 func _update_viewmodel_kinematics(delta: float, horiz_spd: float, sprinting: bool, eff_crouch: bool) -> void:
 	hand_mount.visible = not is_hiding_in_locker and not is_downed
@@ -666,17 +707,23 @@ func _physics_process(delta: float) -> void:
 	_hand_swing = move_toward(_hand_swing, 0.0, delta * 4.5)
 	if SaveState.reduce_motion:
 		_cam_trauma = 0.0
+		_chase_tension = 0.0
 		camera.h_offset = 0.0
 		camera.v_offset = 0.0
 	else:
 		_cam_trauma = move_toward(_cam_trauma, 0.0, delta * 2.4)
+		var off_x := 0.0
+		var off_y := 0.0
 		if _cam_trauma > 0.001:
 			var shake := _cam_trauma * _cam_trauma * 0.045
-			camera.h_offset = randf_range(-shake, shake)
-			camera.v_offset = randf_range(-shake, shake)
-		else:
-			camera.h_offset = 0.0
-			camera.v_offset = 0.0
+			off_x += randf_range(-shake, shake)
+			off_y += randf_range(-shake, shake)
+		if _chase_tension > 0.001 and controls_enabled and not is_dead:
+			var panic_amp := _chase_tension * 0.0085
+			off_x += sin(_idle_breath_t * 43.0) * panic_amp * 0.6 + randf_range(-panic_amp, panic_amp) * 0.5
+			off_y += cos(_idle_breath_t * 51.0) * panic_amp * 0.6 + randf_range(-panic_amp, panic_amp) * 0.5
+		camera.h_offset = off_x
+		camera.v_offset = off_y
 
 	_update_breath_state(delta, bool(pad["hold_breath"]))
 	_update_flashlight_visuals(delta)
@@ -711,7 +758,22 @@ func _physics_process(delta: float) -> void:
 
 	capsule.height = lerpf(capsule.height, target_cap_h, clampf(delta * 12.0, 0.0, 1.0))
 	col_shape.position.y = capsule.height * 0.5
-	head.position.y = lerpf(head.position.y, target_head_y, clampf(delta * 12.0, 0.0, 1.0))
+	var wakeup_roll_active := false
+	if _cage_wakeup_timer > 0.0:
+		var prev_p := 1.0 - (_cage_wakeup_timer / _cage_wakeup_duration)
+		var prev_ease := prev_p * prev_p * (3.0 - 2.0 * prev_p)
+		_cage_wakeup_timer = maxf(0.0, _cage_wakeup_timer - delta)
+		var p := 1.0 - (_cage_wakeup_timer / _cage_wakeup_duration)
+		var ease_p := p * p * (3.0 - 2.0 * p)
+		head.position.y = lerpf(0.36, target_head_y, ease_p)
+		head.rotation.x = clampf(head.rotation.x + (ease_p - prev_ease) * 0.22, -1.35, 1.35)
+		if not SaveState.reduce_motion:
+			wakeup_roll_active = true
+			var groggy_sway := sin(p * PI * 2.0) * 0.045 * (1.0 - ease_p)
+			_cam_roll = lerpf(0.24, 0.0, ease_p) + groggy_sway
+			camera.rotation.z = _cam_roll
+	else:
+		head.position.y = lerpf(head.position.y, target_head_y, clampf(delta * 12.0, 0.0, 1.0))
 
 	var kb := Vector2.ZERO
 	if Input.is_key_pressed(KEY_A) or Input.is_key_pressed(KEY_LEFT):
@@ -748,7 +810,7 @@ func _physics_process(delta: float) -> void:
 	elif sprinting:
 		spd = SPRINT_SPEED
 	if wounds > 0 and not is_downed and adrenaline_timer <= 0.0:
-		spd *= 0.92
+		spd *= 0.86
 	if adrenaline_timer > 0.0 and not is_downed:
 		spd *= 1.28
 
@@ -784,12 +846,15 @@ func _physics_process(delta: float) -> void:
 		elif is_downed or eff_crouch:
 			target_fov = CROUCH_FOV
 		elif sprinting and horiz_spd > WALK_SPEED * 0.9:
-			target_fov = SPRINT_FOV
+			target_fov = lerpf(SPRINT_FOV, 82.0, _chase_tension)
+		elif _chase_tension > 0.001:
+			target_fov = lerpf(BASE_FOV, 77.5, _chase_tension)
 	camera.fov = lerpf(camera.fov, target_fov, 1.0 - exp(-delta * 8.0))
 
-	var target_roll := 0.0 if SaveState.reduce_motion else clampf(-move_in.x * deg_to_rad(1.2), -deg_to_rad(1.2), deg_to_rad(1.2))
-	_cam_roll = lerpf(_cam_roll, target_roll, 1.0 - exp(-delta * 10.0))
-	camera.rotation.z = _cam_roll
+	if not wakeup_roll_active:
+		var target_roll := 0.0 if SaveState.reduce_motion else clampf(-move_in.x * deg_to_rad(1.2), -deg_to_rad(1.2), deg_to_rad(1.2))
+		_cam_roll = lerpf(_cam_roll, target_roll, 1.0 - exp(-delta * 10.0))
+		camera.rotation.z = _cam_roll
 
 	if horiz_spd > 0.35 and is_on_floor():
 		_bob_time += delta * horiz_spd * 2.2

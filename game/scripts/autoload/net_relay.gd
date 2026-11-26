@@ -8,6 +8,8 @@ signal peer_removed(peer_id: String)
 signal peer_voice_received(peer_id: String, pcm8: PackedByteArray, level: float)
 signal remote_event_received(from_id: String, event_type: String, payload: Dictionary)
 signal host_migrated(new_host_id: String, new_host_name: String)
+signal relay_error(reason: String)
+signal connection_status_changed(status: String)
 
 var ws: WebSocketPeer = null
 var connected_to_relay: bool = false
@@ -20,6 +22,22 @@ var _pending_action: Dictionary = {}
 var _reconnect_timer: float = 0.0
 var _was_in_room_before_drop: bool = false
 var _heartbeat_timer: float = 0.0
+var _connected_url: String = ""
+var _connect_timeout: float = 0.0
+
+
+static func normalize_relay_url(raw: String) -> String:
+	var s := raw.strip_edges()
+	if s.is_empty():
+		return ""
+	var low := s.to_lower()
+	if low.begins_with("https://"):
+		s = "wss://" + s.substr(8)
+	elif low.begins_with("http://"):
+		s = "ws://" + s.substr(7)
+	elif not (low.begins_with("ws://") or low.begins_with("wss://")):
+		s = "ws://" + s
+	return s
 
 
 func _ready() -> void:
@@ -40,25 +58,73 @@ func get_squad_size() -> int:
 
 
 func start_solo_mode() -> void:
-	leave_room()
-	is_host = true
-	room_code = ""
-	peers.clear()
+	_pending_action.clear()
+	_was_in_room_before_drop = false
+	_connect_timeout = 0.0
+	_reconnect_timer = 0.0
+	if not room_code.is_empty() or not peers.is_empty():
+		leave_room()
+	else:
+		room_code = ""
+		is_host = true
+		peers.clear()
+	if ws != null:
+		ws.close()
+		ws = null
+	_connected_url = ""
+	if connected_to_relay:
+		connected_to_relay = false
+		connection_status_changed.emit("disconnected")
 
 
 func ensure_socket(url: String = "") -> void:
-	var target := SaveState.relay_url if url.is_empty() else url
+	var raw_target := SaveState.relay_url if url.is_empty() else url
+	var target := normalize_relay_url(raw_target)
+	if target.is_empty():
+		connected_to_relay = false
+		_connected_url = ""
+		connection_status_changed.emit("error")
+		if not _pending_action.is_empty():
+			_pending_action.clear()
+			relay_error.emit("RELAY_UNREACHABLE")
+		return
+
 	if ws != null:
-		var st := ws.get_ready_state()
-		if st == WebSocketPeer.STATE_OPEN or st == WebSocketPeer.STATE_CONNECTING:
-			return
+		if _connected_url != target:
+			if not room_code.is_empty():
+				if ws.get_ready_state() == WebSocketPeer.STATE_OPEN:
+					_send_json({"t": "leave_room", "player_id": SaveState.player_id})
+				room_code = ""
+				is_host = true
+				peers.clear()
+				room_left.emit("url_changed")
+			ws.close()
+			ws = null
+			connected_to_relay = false
+			_connected_url = ""
+			_connect_timeout = 0.0
+		else:
+			var st := ws.get_ready_state()
+			if st == WebSocketPeer.STATE_OPEN or st == WebSocketPeer.STATE_CONNECTING:
+				return
+
 	ws = WebSocketPeer.new()
 	ws.outbound_buffer_size = 262144
 	ws.inbound_buffer_size = 262144
+	_connected_url = target
+	_connect_timeout = 0.0
+	connected_to_relay = false
 	var err := ws.connect_to_url(target)
 	if err != OK:
 		ws = null
+		_connected_url = ""
 		connected_to_relay = false
+		connection_status_changed.emit("error")
+		if not _pending_action.is_empty():
+			_pending_action.clear()
+			relay_error.emit("RELAY_UNREACHABLE")
+	else:
+		connection_status_changed.emit("connecting")
 
 
 func create_room(public_lobby: bool = true, biome: int = 1) -> void:
@@ -98,7 +164,9 @@ func request_open_lobbies() -> void:
 
 
 func leave_room() -> void:
+	_pending_action.clear()
 	_was_in_room_before_drop = false
+	_connect_timeout = 0.0
 	if ws != null and ws.get_ready_state() == WebSocketPeer.STATE_OPEN and not room_code.is_empty():
 		_send_json({"t": "leave_room", "player_id": SaveState.player_id})
 	room_code = ""
@@ -184,8 +252,23 @@ func _process(delta: float) -> void:
 
 	ws.poll()
 	var st := ws.get_ready_state()
-	if st == WebSocketPeer.STATE_OPEN:
-		connected_to_relay = true
+	if st == WebSocketPeer.STATE_CONNECTING or st == WebSocketPeer.STATE_CLOSING:
+		_connect_timeout += delta
+		if _connect_timeout >= 6.0:
+			_connect_timeout = 0.0
+			ws.close()
+			ws = null
+			_connected_url = ""
+			connected_to_relay = false
+			connection_status_changed.emit("error")
+			if not _pending_action.is_empty():
+				_pending_action.clear()
+				relay_error.emit("RELAY_UNREACHABLE")
+	elif st == WebSocketPeer.STATE_OPEN:
+		_connect_timeout = 0.0
+		if not connected_to_relay:
+			connected_to_relay = true
+			connection_status_changed.emit("connected")
 		_try_flush_pending()
 		_heartbeat_timer += delta
 		if _heartbeat_timer >= 3.0:
@@ -198,17 +281,38 @@ func _process(delta: float) -> void:
 			if typeof(parsed) == TYPE_DICTIONARY:
 				_handle_packet(parsed)
 	elif st == WebSocketPeer.STATE_CLOSED:
+		var was_connected := connected_to_relay
 		connected_to_relay = false
 		ws = null
+		_connected_url = ""
+		_connect_timeout = 0.0
 		if not room_code.is_empty():
 			# Enter 25-second auto-reconnect grace window for phone calls / LTE handoff
 			_was_in_room_before_drop = true
 			_reconnect_timer = 1.2
+			if was_connected:
+				connection_status_changed.emit("disconnected")
+		elif not _pending_action.is_empty():
+			_pending_action.clear()
+			connection_status_changed.emit("error")
+			relay_error.emit("RELAY_UNREACHABLE")
+		elif was_connected:
+			connection_status_changed.emit("disconnected")
 
 
 func _handle_packet(msg: Dictionary) -> void:
 	var mtype := str(msg.get("t", ""))
 	match mtype:
+		"error":
+			var reason := str(msg.get("reason", "UNKNOWN"))
+			_pending_action.clear()
+			if not room_code.is_empty() and _was_in_room_before_drop and reason == "ROOM_NOT_FOUND":
+				_was_in_room_before_drop = false
+				room_code = ""
+				is_host = true
+				peers.clear()
+				room_left.emit(reason)
+			relay_error.emit(reason)
 		"room_joined":
 			room_code = str(msg.get("code", ""))
 			is_host = str(msg.get("host_id", "")) == SaveState.player_id

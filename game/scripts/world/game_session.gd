@@ -93,6 +93,8 @@ func _ready() -> void:
 	NetRelay.peer_removed.connect(_on_peer_removed)
 	NetRelay.peer_voice_received.connect(_on_peer_voice)
 	NetRelay.remote_event_received.connect(_on_remote_event)
+	NetRelay.room_left.connect(_on_room_left)
+	NetRelay.host_migrated.connect(_on_host_migrated)
 	Loc.language_changed.connect(_on_language_changed)
 
 	enter_main_menu()
@@ -131,11 +133,23 @@ func enter_main_menu() -> void:
 	_clear_world()
 	player.controls_enabled = false
 	player.visible = false
+	for pid in remote_listeners.keys():
+		var rl := remote_listeners[pid] as RemoteListener
+		if is_instance_valid(rl):
+			rl.visible = false
+			rl.set_process(false)
+			var vp: Variant = rl.get("_voice_player")
+			if vp is AudioStreamPlayer3D and is_instance_valid(vp):
+				(vp as AudioStreamPlayer3D).stop()
 
 	var dio := FloorGenerator.build_menu_diorama(world_container)
 	_menu_cam = dio["camera"] as Camera3D
 	_menu_stalker = dio["stalker"] as Node3D
 	_flicker_lights = dio["flicker_lights"]
+	if SynthAudio.has_method("set_menu_music"):
+		SynthAudio.set_menu_music(true)
+	SynthAudio.update_chase_music(1.0, false, 999.0)
+	player.set_chase_tension(false, 999.0)
 	hud.show_main_menu()
 
 
@@ -147,7 +161,7 @@ func _on_start_solo(diff: int) -> void:
 
 
 func _on_start_coop_host(diff: int) -> void:
-	if not NetRelay.is_host:
+	if NetRelay.room_code.is_empty() or not NetRelay.is_host:
 		return
 	var rng := RandomNumberGenerator.new()
 	rng.randomize()
@@ -170,7 +184,10 @@ func _on_restart_requested() -> void:
 # ===========================================================================
 func start_match(seed_val: int, difficulty: int) -> void:
 	_clear_world()
+	_snapshot_sent.clear()
 	phase = Phase.PLAYING
+	if SynthAudio.has_method("set_menu_music"):
+		SynthAudio.set_menu_music(false)
 	_jumpscare_active = false
 	current_seed = seed_val
 	current_difficulty = difficulty
@@ -215,6 +232,23 @@ func start_match(seed_val: int, difficulty: int) -> void:
 	player.head.rotation.x = 0.0
 	player.controls_enabled = true
 	player.camera.make_current()
+
+	var peer_idx := 1
+	for pid in remote_listeners.keys():
+		var rl := remote_listeners[pid] as RemoteListener
+		if is_instance_valid(rl):
+			var rl_idx := clampi(peer_idx, 1, 3)
+			if rl_idx == spawn_idx:
+				rl_idx = 0
+			var rpos: Vector3 = spawns[rl_idx]
+			rl.global_position = rpos
+			rl._target_pos = rpos
+			rl.set_process(true)
+			rl.visible = not rl.is_hiding
+			peer_idx += 1
+
+	if not NetRelay.room_code.is_empty():
+		player._sync_network(1.0)
 
 	monster_director.spawn_stalker(
 		_map_data["monster_spawn"],
@@ -294,6 +328,7 @@ func _spawn_world_pickup(item_id: String, pos: Vector3, custom_id: String = "") 
 func _raycast_interactable(origin: Vector3, dir: Vector3) -> Node:
 	var space := get_world_3d().direct_space_state
 	var q := PhysicsRayQueryParameters3D.create(origin, origin + dir * 3.1)
+	q.collision_mask = 1 | 8 | 16
 	q.exclude = [player.get_rid()]
 	var hit := space.intersect_ray(q)
 	if hit.is_empty():
@@ -390,6 +425,9 @@ func _on_player_interact(aim_origin: Vector3, aim_dir: Vector3) -> void:
 		if _lockers.has(lid):
 			var lk: Dictionary = _lockers[lid]
 			lk["occupied"] = false
+			var door_piv := lk.get("door_pivot") as Node3D
+			if is_instance_valid(door_piv):
+				door_piv.rotation.y = 0.0
 			player.exit_locker(lk["exit_pos"])
 			SynthAudio.play_3d("locker_clang", lk["exit_pos"], -5.0, 1.05)
 			AcousticBus.emit_noise(lk["exit_pos"], 5.0, 0.25, "locker")
@@ -444,6 +482,9 @@ func _on_player_interact(aim_origin: Vector3, aim_dir: Vector3) -> void:
 				var lk: Dictionary = _lockers[lid]
 				var prev_pos := player.global_position
 				lk["occupied"] = true
+				var door_piv := lk.get("door_pivot") as Node3D
+				if is_instance_valid(door_piv):
+					door_piv.rotation.y = 0.14
 				player.enter_locker(lid, lk["inside_pos"], float(lk["look_yaw"]))
 				SynthAudio.play_3d("locker_clang", lk["exit_pos"], -4.0)
 				AcousticBus.emit_noise(lk["exit_pos"], 5.5, 0.28, "locker")
@@ -524,7 +565,7 @@ func _trigger_pa_intercom(pa_id: String, broadcast: bool) -> void:
 		AcousticBus.emit_noise(target_pos, 38.0, 1.0, "pa_siren")
 		NetRelay.send_game_event("pa_lure", {"id": pa_id})
 	else:
-		monster_director.on_network_noise(target_pos, 38.0)
+		monster_director.on_network_noise(target_pos, 38.0, "pa_siren")
 
 
 func _unlock_holding_cage(broadcast: bool) -> void:
@@ -693,6 +734,8 @@ func _trigger_victory(broadcast: bool) -> void:
 		return
 	phase = Phase.ENDED
 	gate_opening = true
+	SynthAudio.update_chase_music(1.0, false, 999.0)
+	player.set_chase_tension(false, 999.0)
 	SynthAudio.play_2d("victory_airlock", 2.0)
 	monster_director.clear_stalker()
 	SaveState.record_escape(match_elapsed_sec)
@@ -773,6 +816,7 @@ func _update_flying_items_and_flares(delta: float) -> void:
 		n.rotate_x(delta * 6.0)
 
 		var q := PhysicsRayQueryParameters3D.create(cur, nxt)
+		q.collision_mask = 1 | 16
 		q.exclude = [player.get_rid()]
 		var hit := space.intersect_ray(q)
 		if not hit.is_empty() or nxt.y <= 0.06:
@@ -855,32 +899,74 @@ func _update_sound_hazards_and_pa(delta: float) -> void:
 # ===========================================================================
 # 5. TIME-FREE WOUNDS, SURGICAL HOLDING CAGE & CO-OP TEAMMATE RESCUE
 # ===========================================================================
+func _reset_player_jumpscare_camera() -> void:
+	if player == null:
+		return
+	player._cam_trauma = 0.0
+	player._cam_roll = 0.0
+	if player.head != null:
+		player.head.rotation.x = 0.0
+	if player.camera != null:
+		player.camera.fov = ListenerPlayer.BASE_FOV
+		player.camera.position = Vector3.ZERO
+		player.camera.rotation = Vector3.ZERO
+		player.camera.h_offset = 0.0
+		player.camera.v_offset = 0.0
+
+
 func _play_catch_jumpscare() -> void:
 	if DisplayServer.get_name() == "headless":
 		return
-	if player != null and player.camera != null:
-		if SaveState.reduce_motion:
-			player.camera.fov = 50.0
-		else:
-			var fov_tw := create_tween()
-			fov_tw.set_trans(Tween.TRANS_EXPO)
-			fov_tw.set_ease(Tween.EASE_OUT)
-			fov_tw.tween_property(player.camera, "fov", 50.0, 0.11)
-	await get_tree().create_timer(0.82).timeout
+	var duration := 0.85
+	var elapsed := 0.0
+	var rng := RandomNumberGenerator.new()
+	rng.randomize()
+	while elapsed < duration:
+		if not is_inside_tree() or phase != Phase.PLAYING or not _jumpscare_active:
+			return
+		var dt := get_process_delta_time()
+		elapsed += dt
+		if player != null and player.camera != null:
+			if SaveState.reduce_motion:
+				player.camera.fov = 50.0
+			else:
+				var fov_t := clampf(elapsed / 0.11, 0.0, 1.0)
+				var ease_out := 1.0 - pow(1.0 - fov_t, 3.0)
+				player.camera.fov = lerpf(ListenerPlayer.BASE_FOV, 50.0, ease_out)
+			player.camera.h_offset = 0.0
+			player.camera.v_offset = 0.0
+			var head_target := monster_director.get_jumpscare_head_world_pos()
+			if head_target.distance_squared_to(player.camera.global_position) > 0.001:
+				player.camera.look_at(head_target, Vector3.UP)
+			if not SaveState.reduce_motion:
+				var decay := 1.0 - 0.35 * clampf(elapsed / duration, 0.0, 1.0)
+				var pitch_shake := clampf((sin(elapsed * 53.0) * 0.018 + rng.randf_range(-0.007, 0.007)) * decay, -0.03, 0.03)
+				var yaw_shake := clampf((cos(elapsed * 47.0) * 0.016 + rng.randf_range(-0.007, 0.007)) * decay, -0.03, 0.03)
+				var roll_shake := clampf(sin(elapsed * 61.0) * 0.014 * decay, -0.03, 0.03)
+				player.camera.rotate_object_local(Vector3.RIGHT, pitch_shake)
+				player.camera.rotate_object_local(Vector3.UP, yaw_shake)
+				player.camera.rotate_object_local(Vector3.FORWARD, roll_shake)
+		await get_tree().process_frame
 
 
 func _on_local_player_caught() -> void:
 	if phase != Phase.PLAYING or _jumpscare_active or player.is_downed or player.is_dead:
 		return
+	for lid in _lockers.keys():
+		var lk_item: Dictionary = _lockers[lid]
+		if not bool(lk_item.get("occupied", false)):
+			var dpiv := lk_item.get("door_pivot") as Node3D
+			if is_instance_valid(dpiv):
+				dpiv.rotation.y = 0.0
 	_jumpscare_active = true
 	player.controls_enabled = false
+	player.velocity = Vector3.ZERO
+	player._cam_trauma = 0.0
 
 	SynthAudio.play_2d("jumpscare_screech", 3.5)
 	SynthAudio.play_2d("catch_slam", 3.0)
 	monster_director.trigger_jumpscare_pose(player.camera)
-	hud.play_jumpscare_flash(0.82)
-	if not SaveState.reduce_motion:
-		player.add_camera_trauma(1.0)
+	hud.play_jumpscare_flash(0.85)
 	if SaveState.haptics_enabled and OS.get_name() == "Android":
 		Input.vibrate_handheld(260)
 
@@ -889,8 +975,7 @@ func _on_local_player_caught() -> void:
 		return
 
 	monster_director.end_jumpscare_pose()
-	if player != null and player.camera != null:
-		player.camera.fov = ListenerPlayer.BASE_FOV
+	_reset_player_jumpscare_camera()
 	_jumpscare_active = false
 
 	if phase != Phase.PLAYING:
@@ -928,6 +1013,8 @@ func _first_downed_ally_name() -> String:
 
 func _capture_into_holding_cage() -> void:
 	phase = Phase.TRANSITION
+	SynthAudio.update_chase_music(1.0, false, 999.0)
+	player.set_chase_tension(false, 999.0)
 	player.wounds += 1
 	player.is_downed = false
 	player.is_caged = true
@@ -947,12 +1034,18 @@ func _capture_into_holding_cage() -> void:
 	player.rotation.y = -PI * 0.5 # Face +X out through the iron cage bars!
 	monster_director.reset_after_catch(_map_data["monster_spawn"])
 	hud.show_cage_curtain(false)
+	if player.has_method("start_cage_wakeup"):
+		player.start_cage_wakeup(2.2)
+	if hud.has_method("play_cage_wakeup_effect"):
+		hud.play_cage_wakeup_effect(2.5)
 	player.controls_enabled = true
 	phase = Phase.PLAYING
 
 
 func _trigger_game_over() -> void:
 	phase = Phase.ENDED
+	SynthAudio.update_chase_music(1.0, false, 999.0)
+	player.set_chase_tension(false, 999.0)
 	player.is_dead = true
 	player.controls_enabled = false
 	monster_director.clear_stalker()
@@ -1032,6 +1125,8 @@ func _process(delta: float) -> void:
 	var s_dist := monster_director.get_distance_to_local_player()
 	var in_chase := (monster_director.state == MonsterDirector.STATE_CHASE)
 	SynthAudio.update_tension_heartbeat(delta, s_dist, in_chase)
+	SynthAudio.update_chase_music(delta, in_chase, s_dist)
+	player.set_chase_tension(in_chase, s_dist)
 	hud.set_sector_name(FloorGenerator.get_sector_at(player.global_position, Loc.current_lang))
 	_update_tutorial_progression()
 	hud.update_runtime_hud(delta, current_difficulty, monster_director.state, s_dist, _first_downed_ally_name())
@@ -1068,6 +1163,9 @@ func _on_peer_updated(peer_id: String, state: Dictionary) -> void:
 		var rl := RemoteListener.new()
 		rl.peer_id = peer_id
 		add_child(rl)
+		if phase == Phase.MAIN_MENU:
+			rl.visible = false
+			rl.set_process(false)
 		remote_listeners[peer_id] = rl
 		# Late-join friend: hand them the full live match state so they drop into the ongoing descent!
 		if NetRelay.is_host and phase != Phase.MAIN_MENU and not _snapshot_sent.has(peer_id):
@@ -1167,6 +1265,36 @@ func _apply_match_snapshot(d: Dictionary) -> void:
 			_trigger_game_over()
 
 
+func _clear_remote_listeners() -> void:
+	for pid in remote_listeners.keys():
+		var rl := remote_listeners[pid] as RemoteListener
+		if is_instance_valid(rl):
+			rl.queue_free()
+	remote_listeners.clear()
+
+
+func _on_room_left(_reason: String) -> void:
+	_clear_remote_listeners()
+
+
+func _on_host_migrated(new_host_id: String, _new_host_name: String) -> void:
+	if phase == Phase.PLAYING and new_host_id == SaveState.player_id and monster_director != null:
+		if current_difficulty != SaveState.DIFF_PRACTICE:
+			if not monster_director.active or monster_director.stalker_node == null:
+				monster_director.spawn_stalker(
+					_map_data["monster_spawn"],
+					current_difficulty,
+					_map_data["nav_nodes"],
+					_map_data["nav_adj"],
+					_doors,
+					_lockers
+				)
+			else:
+				monster_director.active = true
+				monster_director.state = MonsterDirector.STATE_PATROL
+				monster_director._pick_next_patrol_target()
+
+
 func _on_peer_removed(peer_id: String) -> void:
 	if remote_listeners.has(peer_id):
 		var rl := remote_listeners[peer_id] as RemoteListener
@@ -1176,6 +1304,8 @@ func _on_peer_removed(peer_id: String) -> void:
 
 
 func _on_peer_voice(peer_id: String, pcm8: PackedByteArray, _lvl: float) -> void:
+	if phase == Phase.MAIN_MENU:
+		return
 	if remote_listeners.has(peer_id):
 		(remote_listeners[peer_id] as RemoteListener).play_voice_packet(pcm8)
 
@@ -1191,7 +1321,7 @@ func _on_remote_event(_from_id: String, ev: String, data: Dictionary) -> void:
 		"noise":
 			if typeof(data.get("pos")) == TYPE_ARRAY and data["pos"].size() >= 3:
 				var p: Array = data["pos"]
-				monster_director.on_network_noise(Vector3(float(p[0]), float(p[1]), float(p[2])), float(data.get("r", 10.0)))
+				monster_director.on_network_noise(Vector3(float(p[0]), float(p[1]), float(p[2])), float(data.get("r", 10.0)), str(data.get("tag", "")))
 		"door_toggle":
 			var did := str(data.get("id", ""))
 			for d in _doors:

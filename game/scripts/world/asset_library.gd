@@ -61,7 +61,7 @@ static func get_world_material(mat_key: String) -> StandardMaterial3D:
 			mat.albedo_color = Color(0.46, 0.76, 0.70)
 			mat.normal_enabled = true
 			mat.normal_texture = load("res://assets/textures/concrete_wall_n.png") as Texture2D
-			mat.normal_scale = 0.78
+			mat.normal_scale = 0.72
 			mat.roughness = 0.62
 			mat.metallic = 0.04
 			mat.uv1_scale = Vector3(0.38, 0.38, 0.38)
@@ -71,7 +71,7 @@ static func get_world_material(mat_key: String) -> StandardMaterial3D:
 			mat.albedo_color = Color(1.56, 1.48, 1.26)
 			mat.normal_enabled = true
 			mat.normal_texture = load("res://assets/textures/concrete_wall_n.png") as Texture2D
-			mat.normal_scale = 1.05
+			mat.normal_scale = 0.80
 			mat.roughness = 0.90
 			mat.uv1_scale = Vector3(0.36, 0.36, 0.36)
 		"wall_surgical":
@@ -90,7 +90,7 @@ static func get_world_material(mat_key: String) -> StandardMaterial3D:
 			mat.albedo_color = Color(0.52, 0.54, 0.50)
 			mat.normal_enabled = true
 			mat.normal_texture = load("res://assets/textures/concrete_wall_n.png") as Texture2D
-			mat.normal_scale = 1.28
+			mat.normal_scale = 0.85
 			mat.roughness = 0.92
 			mat.uv1_scale = Vector3(0.34, 0.34, 0.34)
 		"dado_strip":
@@ -195,6 +195,9 @@ static func get_world_material(mat_key: String) -> StandardMaterial3D:
 			mat.roughness = 0.88
 			mat.uv1_scale = Vector3(0.36, 0.36, 0.36)
 
+	if mat.albedo_texture != null or mat.normal_texture != null:
+		mat.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS_ANISOTROPIC
+
 	_materials[mat_key] = mat
 	return mat
 
@@ -220,6 +223,7 @@ static func _make_blood_decal_texture() -> ImageTexture:
 			var core := clampf(1.0 - r * 0.72, 0.0, 1.0)
 			var col := Color(0.24 + 0.14 * core, 0.025 + 0.015 * core, 0.025, alpha * 0.90)
 			img.set_pixel(x, y, col)
+	img.generate_mipmaps()
 	return ImageTexture.create_from_image(img)
 
 

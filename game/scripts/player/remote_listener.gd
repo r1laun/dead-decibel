@@ -27,27 +27,38 @@ var _beam: SpotLight3D = null
 var _voice_player: AudioStreamPlayer3D = null
 var _walk_anim_name: String = ""
 var _idle_anim_name: String = ""
+var _crouch_idle_anim_name: String = ""
+var _crouch_walk_anim_name: String = ""
+var _downed_anim_name: String = ""
 
 
 func _ready() -> void:
 	_avatar = AssetLibrary.instantiate_model("survivor_hazmat")
+	_avatar.scale = Vector3.ONE
 	add_child(_avatar)
 	_anim = AssetLibrary.find_animation_player(_avatar)
 	if _anim != null:
 		for aname in _anim.get_animation_list():
 			var low := aname.to_lower()
+			var norm := low.replace("_", "").replace("-", "").replace(" ", "")
 			var a := _anim.get_animation(aname)
 			if a != null:
 				a.loop_mode = Animation.LOOP_LINEAR
-			if low.contains("walk"):
+			if norm.contains("crouchwalk"):
+				_crouch_walk_anim_name = aname
+			elif norm.contains("crouchidle") or norm == "crouch":
+				_crouch_idle_anim_name = aname
+			elif norm.contains("downed"):
+				_downed_anim_name = aname
+			elif norm.contains("walk"):
 				_walk_anim_name = aname
-			elif low.contains("idle"):
+			elif norm.contains("idle"):
 				_idle_anim_name = aname
 		if not _idle_anim_name.is_empty():
 			_anim.play(_idle_anim_name)
 
 	_name_lbl = Label3D.new()
-	_name_lbl.position = Vector3(0, 2.04, 0)
+	_name_lbl.position = Vector3(0, 2.02, 0)
 	_name_lbl.billboard = BaseMaterial3D.BILLBOARD_ENABLED
 	_name_lbl.font_size = 28
 	_name_lbl.outline_size = 7
@@ -73,6 +84,8 @@ func _ready() -> void:
 	add_child(_beam)
 
 	var sb := StaticBody3D.new()
+	sb.collision_layer = 8
+	sb.collision_mask = 0
 	sb.set_meta("interact_type", "ally")
 	sb.set_meta("peer_id", peer_id)
 	var cs := CollisionShape3D.new()
@@ -129,26 +142,14 @@ func _process(delta: float) -> void:
 
 	if _beam != null:
 		_beam.visible = flashlight_on and not is_hiding and not is_downed
-		var beam_y := 1.08 if is_crouching else 1.52
+		var beam_y := 1.04 if is_crouching else 1.52
 		_beam.position.y = lerpf(_beam.position.y, beam_y, smooth)
 		_beam.rotation.x = lerpf(_beam.rotation.x, _target_pitch, smooth)
 
 	if _avatar != null:
-		var target_scale := Vector3.ONE
-		var target_pos := Vector3.ZERO
-		var target_rot_x := 0.0
-		if is_downed:
-			target_scale = Vector3(1.0, 0.96, 1.0)
-			target_pos = Vector3(0.0, 0.16, 0.56)
-			target_rot_x = -1.22
-		elif is_crouching:
-			target_scale = Vector3(1.04, 0.76, 1.04)
-			target_pos = Vector3(0.0, 0.0, 0.04)
-			target_rot_x = -0.18
-		var posture_alpha := 1.0 - exp(-delta * 10.0)
-		_avatar.scale = _avatar.scale.lerp(target_scale, posture_alpha)
-		_avatar.position = _avatar.position.lerp(target_pos, posture_alpha)
-		_avatar.rotation.x = lerpf(_avatar.rotation.x, target_rot_x, posture_alpha)
+		_avatar.scale = Vector3.ONE
+		_avatar.position = Vector3.ZERO
+		_avatar.rotation = Vector3.ZERO
 
 	if _name_lbl != null:
 		var tag := ""
@@ -165,10 +166,20 @@ func _process(delta: float) -> void:
 			lbl_col = COL_PAPER_DIM
 		_name_lbl.modulate = lbl_col
 		_name_lbl.text = callsign + tag
-		var lbl_y := 1.05 if is_downed else (1.58 if is_crouching else 2.04)
+		var lbl_y := 0.95 if is_downed else (1.48 if is_crouching else 2.02)
 		_name_lbl.position.y = lerpf(_name_lbl.position.y, lbl_y, 1.0 - exp(-delta * 10.0))
 
 	if _anim != null:
-		var want := _walk_anim_name if move_dist > 0.06 else _idle_anim_name
+		var is_moving := move_dist > 0.06
+		var want := ""
+		if is_downed:
+			want = _downed_anim_name if not _downed_anim_name.is_empty() else _idle_anim_name
+		elif is_crouching:
+			if is_moving:
+				want = _crouch_walk_anim_name if not _crouch_walk_anim_name.is_empty() else (_crouch_idle_anim_name if not _crouch_idle_anim_name.is_empty() else _walk_anim_name)
+			else:
+				want = _crouch_idle_anim_name if not _crouch_idle_anim_name.is_empty() else _idle_anim_name
+		else:
+			want = _walk_anim_name if is_moving else _idle_anim_name
 		if not want.is_empty() and _anim.current_animation != want:
-			_anim.play(want)
+			_anim.play(want, 0.18)

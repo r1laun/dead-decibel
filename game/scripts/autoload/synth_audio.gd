@@ -6,6 +6,8 @@ var clips: Dictionary = {}
 var _pool_2d: Array[AudioStreamPlayer] = []
 var _pool_3d: Array[AudioStreamPlayer3D] = []
 var _drone_player: AudioStreamPlayer = null
+var _menu_music_player: AudioStreamPlayer = null
+var _chase_music_player: AudioStreamPlayer = null
 var _heartbeat_timer: float = 0.0
 
 
@@ -29,10 +31,37 @@ func _ready() -> void:
 	_drone_player = AudioStreamPlayer.new()
 	_drone_player.bus = &"WorldSFX"
 	_drone_player.stream = clips["ambient_drone"]
-	_drone_player.volume_db = -14.0
+	_drone_player.volume_db = -24.0
 	add_child(_drone_player)
 	if DisplayServer.get_name() != "headless":
 		_drone_player.play()
+
+	_menu_music_player = AudioStreamPlayer.new()
+	_menu_music_player.bus = &"Master"
+	_menu_music_player.stream = clips["menu_theme"]
+	_menu_music_player.volume_db = -10.5
+	add_child(_menu_music_player)
+
+	_chase_music_player = AudioStreamPlayer.new()
+	_chase_music_player.bus = &"Master"
+	_chase_music_player.stream = clips["chase_theme"]
+	_chase_music_player.volume_db = -80.0
+	add_child(_chase_music_player)
+
+
+func set_menu_music(enabled: bool) -> void:
+	if DisplayServer.get_name() == "headless" or _menu_music_player == null:
+		return
+	if enabled:
+		if _chase_music_player != null and _chase_music_player.playing:
+			_chase_music_player.stop()
+			_chase_music_player.volume_db = -80.0
+			_chase_music_player.pitch_scale = 1.0
+		if not _menu_music_player.playing:
+			_menu_music_player.play()
+	else:
+		if _menu_music_player.playing:
+			_menu_music_player.stop()
 
 
 func _ensure_audio_buses() -> void:
@@ -82,30 +111,21 @@ func _build_all_clips() -> void:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 90707
 
-	# 1. Dark Facility Ambient Drone (6.0s seamless loop with sub-harmonic room resonance)
+	# 1. Quiet Underground Concrete Facility Hum (6.0s seamless loop, zero wind/white-noise)
 	var n := int(SAMPLE_RATE * 6.0)
 	var buf := PackedFloat32Array()
 	buf.resize(n)
-	var xfade := int(SAMPLE_RATE * 0.40)
-	var raw_air := PackedFloat32Array()
-	raw_air.resize(n + xfade)
-	var air_lp := 0.0
-	for i in range(n + xfade):
-		air_lp = air_lp * 0.93 + rng.randf_range(-1.0, 1.0) * 0.07
-		raw_air[i] = air_lp
 	for i in range(n):
 		var t := float(i) / SAMPLE_RATE
 		var slow_lfo := 0.5 + 0.5 * sin(TAU * t / 6.0)
-		var pulse_lfo := 0.5 + 0.5 * sin(TAU * t / 2.0)
-		var sub := sin(TAU * 36.0 * t + 0.30 * sin(TAU * t / 6.0)) * 0.36
-		var fifth := sin(TAU * 54.0 * t) * 0.22 + sin(TAU * 54.5 * t) * 0.13
-		var room_mode := sin(TAU * 108.0 * t) * (0.06 + 0.05 * slow_lfo)
-		var cold_hum := sin(TAU * 158.5 * t) * 0.045 * pulse_lfo + sin(TAU * 216.0 * t) * 0.025
-		var air := raw_air[i]
-		if i < xfade:
-			var w := 0.5 - 0.5 * cos(PI * float(i) / float(xfade))
-			air = lerpf(raw_air[n + i], raw_air[i], w)
-		buf[i] = clampf((sub + fifth + room_mode + cold_hum + air * 0.65) * 0.72, -1.0, 1.0)
+		var vent_lfo := 0.5 + 0.5 * sin(TAU * t / 3.0)
+		# Soft 50 Hz fluorescent lamp ballast hum + gentle 100/150 Hz harmonics
+		var ballast := sin(TAU * 50.0 * t) * 0.24 + sin(TAU * 100.0 * t) * 0.08 + sin(TAU * 150.0 * t) * 0.025
+		# Distant ventilation resonance (low sub-room harmonic, zero noise)
+		var vent_res := sin(TAU * 36.0 * t) * (0.18 + 0.06 * slow_lfo) + sin(TAU * 72.0 * t) * (0.09 + 0.03 * vent_lfo)
+		# Faint metallic pipe undertone
+		var pipe_hum := sin(TAU * 108.0 * t) * (0.045 + 0.025 * slow_lfo) + sin(TAU * 162.0 * t) * 0.018
+		buf[i] = clampf((ballast + vent_res + pipe_hum) * 0.55, -1.0, 1.0)
 	clips["ambient_drone"] = _make_wav(buf, true)
 
 	# 2. Crisp Analog Instrument Relay Click (tactile Bakelite toggle)
@@ -464,6 +484,216 @@ func _build_all_clips() -> void:
 		buf[i] = clampf(buf[i] * norm, -1.0, 1.0)
 	clips["jumpscare_screech"] = _make_wav(buf)
 
+	# 21. Monster Idle Jaw-Click Echo (creepy rapid mandible clicks)
+	n = int(SAMPLE_RATE * 0.58)
+	var idle_dry := PackedFloat32Array()
+	idle_dry.resize(n)
+	var idle_onsets: Array[float] = [0.0, 0.068, 0.129, 0.214]
+	var idle_freqs: Array[float] = [1680.0, 1920.0, 1510.0, 2080.0]
+	var idle_gains: Array[float] = [0.88, 0.72, 0.94, 0.60]
+	for i in range(n):
+		var t := float(i) / SAMPLE_RATE
+		var val := 0.0
+		for ci in range(idle_onsets.size()):
+			var dt := t - idle_onsets[ci]
+			if dt >= 0.0 and dt < 0.065:
+				var f0 := idle_freqs[ci]
+				var jaw := sin(TAU * (f0 * exp(-dt * 38.0) + 460.0) * dt) * exp(-dt * 145.0) * 0.58
+				var snap := rng.randf_range(-1.0, 1.0) * exp(-dt * 240.0) * 0.36
+				var pop := sin(TAU * 185.0 * dt) * exp(-dt * 58.0) * 0.24
+				val += (jaw + snap + pop) * idle_gains[ci]
+		idle_dry[i] = clampf(val, -1.0, 1.0)
+	buf = PackedFloat32Array()
+	buf.resize(n)
+	for i in range(n):
+		var wet := 0.0
+		if i >= 613:
+			wet += idle_dry[i - 613] * 0.32
+		if i >= 1321:
+			wet += idle_dry[i - 1321] * 0.19
+		buf[i] = clampf(idle_dry[i] * 0.85 + wet * 0.75, -1.0, 1.0)
+	clips["monster_click_idle"] = _make_wav(buf)
+
+	# 22. Monster Wet Guttural Breath Rasp + Faint Shackle Clink
+	n = int(SAMPLE_RATE * 1.15)
+	buf = PackedFloat32Array()
+	buf.resize(n)
+	var rasp_lp := 0.0
+	for i in range(n):
+		var t := float(i) / SAMPLE_RATE
+		var inhale_env := sin(minf(1.0, t / 0.35) * PI * 0.5) * exp(-maxf(0.0, t - 0.28) * 2.3)
+		rasp_lp = rasp_lp * 0.72 + rng.randf_range(-1.0, 1.0) * 0.28
+		var flutter := 0.55 + 0.45 * sin(TAU * (29.0 + 7.0 * sin(TAU * 3.0 * t)) * t)
+		var throat := tanh(sin(TAU * (86.0 + 11.0 * sin(TAU * 6.5 * t)) * t) * 1.7) * 0.42
+		var wet_air := rasp_lp * flutter * 0.78
+		var clink := 0.0
+		if t > 0.52:
+			var ct := t - 0.52
+			clink = (sin(TAU * 2640.0 * ct) * 0.16 + sin(TAU * 3890.0 * ct) * 0.11) * exp(-ct * 24.0)
+		buf[i] = clampf((throat + wet_air) * inhale_env * 0.85 + clink, -1.0, 1.0)
+	clips["monster_breath_rasp"] = _make_wav(buf)
+
+	# 23. Scary Main Menu Horror Theme (16.0s seamless loop: bowed tritone drone + detuned cold bells + sub heartbeat)
+	n = int(SAMPLE_RATE * 16.0)
+	var menu_dry := PackedFloat32Array()
+	menu_dry.resize(n)
+	# Notes: D2 (73.42), Eb2 (77.78), A2 (110.0), Bb2 (116.54), F3 (174.61)
+	var note_times: Array[float] = [0.65, 3.10, 5.25, 8.05, 10.35, 12.60, 14.15]
+	var note_freqs: Array[float] = [73.42, 174.61, 77.78, 110.00, 116.54, 174.61, 77.78]
+	var note_gains: Array[float] = [0.34, 0.22, 0.32, 0.26, 0.28, 0.20, 0.30]
+	for i in range(n):
+		var t := float(i) / SAMPLE_RATE
+		var swell_1 := 0.55 + 0.45 * sin(TAU * t / 16.0)
+		var swell_2 := 0.50 + 0.50 * sin(TAU * t / 8.0 + 1.1)
+		# Dark minor-second & tritone bowed string/organ drone (frequencies cycle-aligned to 16.0s)
+		var d2_bow := sin(TAU * 73.375 * t + 0.18 * sin(TAU * 0.25 * t)) * 0.20
+		var eb2_bow := sin(TAU * 77.75 * t) * (0.07 + 0.10 * swell_2)
+		var tritone_bow := sin(TAU * 103.8125 * t) * (0.06 + 0.08 * swell_1)
+		var a1_sub := sin(TAU * 55.0 * t) * 0.22
+		var shimmer := sin(TAU * 311.125 * t) * (0.015 + 0.020 * swell_1) + sin(TAU * 466.125 * t) * (0.010 * swell_2)
+
+		# Subtle heartbeat sub-pulse (every 1.6s = 10 beats per 16s loop)
+		var hb_t := fmod(t, 1.6)
+		var hb_lub := sin(TAU * 52.0 * hb_t) * exp(-hb_t * 20.0) * 0.19
+		var hb_dub := sin(TAU * 58.0 * maxf(0.0, hb_t - 0.19)) * exp(-maxf(0.0, hb_t - 0.19) * 24.0) * (0.14 if hb_t > 0.19 else 0.0)
+
+		# Sparse detuned cold piano/bell horror notes
+		var bell := 0.0
+		for ni in range(note_times.size()):
+			var dt := t - note_times[ni]
+			if dt >= 0.0 and dt < 3.6:
+				var f := note_freqs[ni]
+				var n_atk := clampf(dt / 0.014, 0.0, 1.0)
+				var n_env := n_atk * exp(-dt * 1.45)
+				var p1 := sin(TAU * f * dt) * 0.62 + sin(TAU * (f * 1.0055) * dt) * 0.38
+				var p2 := sin(TAU * (f * 2.003) * dt) * exp(-dt * 2.4) * 0.24
+				var p3 := sin(TAU * (f * 3.01) * dt) * exp(-dt * 4.2) * 0.10
+				bell += (p1 + p2 + p3) * n_env * note_gains[ni]
+
+		menu_dry[i] = d2_bow + eb2_bow + tritone_bow + a1_sub + shimmer + hb_lub + hb_dub + bell
+
+	buf = PackedFloat32Array()
+	buf.resize(n)
+	var m_taps: Array[int] = [1433, 2879, 4421, 6619]
+	var m_gains: Array[float] = [0.28, 0.20, 0.14, 0.09]
+	var m_lp := 0.0
+	var m_peak := 0.001
+	for i in range(n):
+		var wet := 0.0
+		for ti in range(m_taps.size()):
+			var src := (i - m_taps[ti] + n) % n
+			wet += menu_dry[src] * m_gains[ti]
+		m_lp = m_lp * 0.58 + wet * 0.42
+		buf[i] = menu_dry[i] * 0.78 + m_lp * 0.56
+		m_peak = maxf(m_peak, absf(buf[i]))
+	var m_norm := 0.84 / m_peak
+	for i in range(n):
+		buf[i] = clampf(buf[i] * m_norm, -1.0, 1.0)
+	clips["menu_theme"] = _make_wav(buf, true)
+
+	# 24. Monster Alert Jaw Chatter (rapid clicking bone-jaw snap when hearing sound)
+	n = int(SAMPLE_RATE * 0.54)
+	var chat_dry := PackedFloat32Array()
+	chat_dry.resize(n)
+	var chat_onsets: Array[float] = [0.0, 0.048, 0.092, 0.146, 0.190, 0.242, 0.304]
+	var chat_freqs: Array[float] = [2150.0, 2480.0, 1890.0, 2620.0, 2040.0, 2390.0, 1740.0]
+	var chat_gains: Array[float] = [0.95, 0.82, 0.90, 0.78, 0.96, 0.74, 0.65]
+	for i in range(n):
+		var t := float(i) / SAMPLE_RATE
+		var cval := 0.0
+		for ci in range(chat_onsets.size()):
+			var dt := t - chat_onsets[ci]
+			if dt >= 0.0 and dt < 0.055:
+				var f0 := chat_freqs[ci]
+				var clack := sin(TAU * (f0 * exp(-dt * 44.0) + 520.0) * dt) * exp(-dt * 165.0) * 0.62
+				var bone := rng.randf_range(-1.0, 1.0) * exp(-dt * 270.0) * 0.44
+				var rasp := sin(TAU * 225.0 * dt) * exp(-dt * 68.0) * 0.22
+				cval += (clack + bone + rasp) * chat_gains[ci]
+		chat_dry[i] = clampf(cval, -1.0, 1.0)
+	buf = PackedFloat32Array()
+	buf.resize(n)
+	var c_peak := 0.001
+	for i in range(n):
+		var wet := 0.0
+		if i >= 487:
+			wet += chat_dry[i - 487] * 0.30
+		if i >= 1093:
+			wet += chat_dry[i - 1093] * 0.18
+		buf[i] = chat_dry[i] * 0.88 + wet * 0.70
+		c_peak = maxf(c_peak, absf(buf[i]))
+	var c_norm := 0.90 / c_peak
+	for i in range(n):
+		buf[i] = clampf(buf[i] * c_norm, -1.0, 1.0)
+	clips["monster_chatter"] = _make_wav(buf)
+
+	# 25. Heart-Pounding Horror Chase Loop (4.0s seamless loop: ~150 BPM double-thump + screeching bowed strings + sub-bass dread)
+	n = int(SAMPLE_RATE * 4.0)
+	var chase_dry := PackedFloat32Array()
+	chase_dry.resize(n)
+	var chase_lp := 0.0
+	var stinger_times: Array[float] = [0.0, 0.80, 1.60, 2.40, 3.20]
+	var stinger_roots: Array[float] = [587.0, 622.25, 554.25, 659.25, 622.25]
+	for i in range(n):
+		var t := float(i) / SAMPLE_RATE
+		# Beat cycle: 10 beats per 4.0s (0.40s per beat = 150 BPM, seamless wrap)
+		var beat_idx := int(floor(t / 0.40))
+		var bt := fmod(t, 0.40)
+
+		# Heavy industrial double-thump percussion (primary thump + tight double-kick on even beats)
+		var k1_f := 42.0 + 96.0 * exp(-bt * 34.0)
+		var kick1 := tanh(sin(TAU * k1_f * bt) * 2.2) * exp(-bt * 12.5) * 0.72
+		var kick1_click := rng.randf_range(-1.0, 1.0) * exp(-bt * 95.0) * 0.28
+		var kick2 := 0.0
+		if bt >= 0.14:
+			var bt2 := bt - 0.14
+			var double_gain := 0.58 if (beat_idx % 2 == 0) else 0.34
+			var k2_f := 46.0 + 82.0 * exp(-bt2 * 38.0)
+			kick2 = tanh(sin(TAU * k2_f * bt2) * 2.0) * exp(-bt2 * 16.0) * double_gain
+
+		# Metallic industrial clang / offbeat rail strike
+		var off_t := fmod(t + 0.20, 0.40)
+		var clang := (sin(TAU * 890.0 * off_t) * 0.35 + sin(TAU * 1345.0 * off_t) * 0.25 + rng.randf_range(-0.5, 0.5)) * exp(-off_t * 28.0) * 0.22
+
+		# Distorted low sub-bass dread pulse (cycle-aligned to 4.0s: 48 Hz, 51 Hz, 96 Hz)
+		var pulse_lfo := 0.62 + 0.38 * sin(TAU * 2.5 * t)
+		var sub_raw := sin(TAU * 48.0 * t) * 0.58 + sin(TAU * 51.0 * t) * 0.36 + sin(TAU * 96.0 * t) * 0.24
+		var sub_dread := tanh(sub_raw * 2.1) * 0.42 * pulse_lfo
+
+		# Screeching dissonant bowed horror strings / metallic violin stingers (Outlast / Insidious anxiety)
+		chase_lp = chase_lp * 0.58 + rng.randf_range(-1.0, 1.0) * 0.42
+		var strings := 0.0
+		for si in range(stinger_times.size()):
+			var dt := t - stinger_times[si]
+			if dt >= 0.0 and dt < 0.76:
+				var sf := stinger_roots[si] * (1.0 + 0.035 * dt)
+				var s_env := clampf(dt / 0.035, 0.0, 1.0) * exp(-dt * 2.35) * clampf((0.76 - dt) / 0.06, 0.0, 1.0)
+				var bow_fm := sin(TAU * 31.0 * dt) * 18.0 + chase_lp * 28.0
+				var v1 := tanh(sin(TAU * (sf + bow_fm) * dt) * 1.8) * 0.42
+				var v2 := tanh(sin(TAU * (sf * 1.064 + bow_fm * 0.8) * dt) * 1.7) * 0.34
+				var v3 := sin(TAU * (sf * 1.414) * dt) * 0.20
+				strings += (v1 + v2 + v3 + chase_lp * 0.16) * s_env * 0.55
+
+		chase_dry[i] = kick1 + kick1_click + kick2 + clang + sub_dread + strings
+
+	buf = PackedFloat32Array()
+	buf.resize(n)
+	var ch_taps: Array[int] = [701, 1543, 2411]
+	var ch_gains: Array[float] = [0.22, 0.14, 0.08]
+	var ch_lp := 0.0
+	var ch_peak := 0.001
+	for i in range(n):
+		var wet := 0.0
+		for ti in range(ch_taps.size()):
+			var src := (i - ch_taps[ti] + n) % n
+			wet += chase_dry[src] * ch_gains[ti]
+		ch_lp = ch_lp * 0.52 + wet * 0.48
+		buf[i] = chase_dry[i] * 0.86 + ch_lp * 0.42
+		ch_peak = maxf(ch_peak, absf(buf[i]))
+	var ch_norm := 0.90 / ch_peak
+	for i in range(n):
+		buf[i] = clampf(buf[i] * ch_norm, -1.0, 1.0)
+	clips["chase_theme"] = _make_wav(buf, true)
+
 
 func play_2d(clip_name: String, vol_db: float = 0.0, pitch: float = 1.0) -> void:
 	if DisplayServer.get_name() == "headless" or not clips.has(clip_name):
@@ -513,3 +743,32 @@ func update_tension_heartbeat(delta: float, monster_dist: float, in_chase: bool)
 		play_2d("heartbeat", lerpf(-14.0, -2.0, closeness), lerpf(0.95, 1.15, closeness))
 		if SaveState.haptics_enabled and OS.get_name() == "Android" and closeness > 0.55:
 			Input.vibrate_handheld(int(35.0 * closeness))
+
+
+func update_chase_music(delta: float, in_chase: bool, monster_dist: float) -> void:
+	if DisplayServer.get_name() == "headless" or _chase_music_player == null:
+		return
+	if in_chase:
+		var prox := clampf(1.0 - (monster_dist / 14.0), 0.0, 1.0)
+		var target_vol := lerpf(-9.5, -5.5, prox)
+		var target_pitch := lerpf(1.0, 1.08, prox)
+		if not _chase_music_player.playing:
+			_chase_music_player.volume_db = -24.0
+			_chase_music_player.pitch_scale = target_pitch
+			_chase_music_player.play()
+		var alpha := 1.0 - exp(-delta * 10.0)
+		_chase_music_player.volume_db = lerpf(_chase_music_player.volume_db, target_vol, alpha)
+		_chase_music_player.pitch_scale = lerpf(_chase_music_player.pitch_scale, target_pitch, alpha)
+	else:
+		if _chase_music_player.playing:
+			if delta >= 0.9:
+				_chase_music_player.stop()
+				_chase_music_player.volume_db = -80.0
+				_chase_music_player.pitch_scale = 1.0
+				return
+			_chase_music_player.volume_db = move_toward(_chase_music_player.volume_db, -60.0, delta * 30.0)
+			_chase_music_player.pitch_scale = lerpf(_chase_music_player.pitch_scale, 1.0, 1.0 - exp(-delta * 3.0))
+			if _chase_music_player.volume_db <= -59.5:
+				_chase_music_player.stop()
+				_chase_music_player.volume_db = -80.0
+				_chase_music_player.pitch_scale = 1.0

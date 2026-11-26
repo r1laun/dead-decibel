@@ -10,24 +10,24 @@ const STRINGS: Dictionary = {
 		"en": "DEAD DECIBEL"
 	},
 	"GAME_SUBTITLE": {
-		"ru": "Кооперативный акустический хоррор  ·  Без таймеров, храни тишину",
-		"en": "Co-op acoustic survival horror  ·  No timers, every sound counts"
+		"ru": "Бункер НИИ-07, карантинный этаж\nБез таймеров",
+		"en": "Bunker NII-07, Quarantine Floor\nNo timers"
 	},
 	"MENU_PLAY_SOLO": {
-		"ru": "Одиночная вылазка",
-		"en": "Solo infiltration"
+		"ru": "Одиночная игра",
+		"en": "Solo"
 	},
 	"MENU_PLAY_COOP": {
-		"ru": "Кооператив (1–4 игрока)",
-		"en": "Co-op squad (1–4)"
+		"ru": "Кооператив (1–4)",
+		"en": "Co-op (1–4)"
 	},
 	"MENU_SETTINGS": {
 		"ru": "Настройки",
 		"en": "Settings"
 	},
 	"MENU_HOW_TO_PLAY": {
-		"ru": "Полевой справочник",
-		"en": "Field manual"
+		"ru": "Как играть",
+		"en": "How to play"
 	},
 	"MENU_QUIT": {
 		"ru": "Выход",
@@ -38,39 +38,39 @@ const STRINGS: Dictionary = {
 		"en": "Back"
 	},
 	"DIFF_TITLE": {
-		"ru": "Режим допуска",
-		"en": "Clearance mode"
+		"ru": "Сложность",
+		"en": "Difficulty"
 	},
 	"DIFF_PRACTICE": {
-		"ru": "Разведка — без Слухача-07, спокойное изучение всех 14 отсеков",
-		"en": "Recon — no Listener-07, explore all 14 sectors freely"
+		"ru": "Разведка: Слухача-07 нет, все 14 отсеков открыты",
+		"en": "Practice: no Listener-07, walk all 14 rooms safely"
 	},
 	"DIFF_NORMAL": {
-		"ru": "Стандарт — без лимита времени, шанс выбраться из изолятора",
-		"en": "Standard — no time limit, escape from holding cage if caught"
+		"ru": "Обычный: без таймера, из изолятора можно выбраться",
+		"en": "Normal: no time limit, break out of the cage if caught"
 	},
 	"DIFF_NIGHTMARE": {
-		"ru": "Кошмар — острый слух, выбивание дверей, тяжёлое ранение со старта",
-		"en": "Nightmare — acute sonar, door-smashing frenzy, critical start"
+		"ru": "Кошмар: слышит дальше, ломает двери, старт с ранением",
+		"en": "Nightmare: sharper hearing, breaks down doors, start wounded"
 	},
 	"START_GAME_BTN": {
-		"ru": "Начать спуск",
-		"en": "Begin descent"
+		"ru": "Играть",
+		"en": "Play"
 	},
 	"COOP_TITLE": {
-		"ru": "Связь группы (до 4 выживших)",
-		"en": "Squad uplink (up to 4 survivors)"
+		"ru": "Кооператив (до 4 игроков)",
+		"en": "Co-op (up to 4 players)"
 	},
 	"COOP_NAME_LABEL": {
 		"ru": "Позывной:",
 		"en": "Callsign:"
 	},
 	"COOP_SERVER_LABEL": {
-		"ru": "Адрес ретранслятора (WebSocket):",
-		"en": "Relay address (WebSocket):"
+		"ru": "Сервер (WebSocket):",
+		"en": "Server (WebSocket):"
 	},
 	"COOP_CREATE_BTN": {
-		"ru": "Создать канал",
+		"ru": "Создать комнату",
 		"en": "Create room"
 	},
 	"COOP_JOIN_BTN": {
@@ -78,80 +78,80 @@ const STRINGS: Dictionary = {
 		"en": "Join by code"
 	},
 	"COOP_COPY_CODE": {
-		"ru": "Скопировать код",
+		"ru": "Копировать код",
 		"en": "Copy code"
 	},
 	"COOP_REFRESH_PUBLIC": {
-		"ru": "Открытые группы",
+		"ru": "Открытые комнаты",
 		"en": "Open rooms"
 	},
 	"COOP_ROOM_STATUS_NONE": {
-		"ru": "Канал не выбран. Создайте комнату или введите 4-буквенный код напарника.",
-		"en": "No active channel. Create a room or enter your teammate's 4-letter code."
+		"ru": "Вы не в комнате. Создайте свою или введите код из 4 букв.",
+		"en": "Not in a room. Create one or enter a 4-letter code."
 	},
 	"COOP_ROOM_STATUS_ACTIVE": {
-		"ru": "Канал %s  ·  Группа %d/4  ·  %s",
-		"en": "Channel %s  ·  Squad %d/4  ·  %s"
+		"ru": "Комната %s  ·  Игроков: %d/4  ·  %s",
+		"en": "Room %s  ·  %d/4 players  ·  %s"
 	},
 	"ROLE_HOST": {
-		"ru": "Ведущий",
+		"ru": "Хост",
 		"en": "Host"
 	},
 	"ROLE_CLIENT": {
-		"ru": "Боец",
-		"en": "Operative"
+		"ru": "Игрок",
+		"en": "Player"
 	},
 	"COOP_START_MATCH": {
-		"ru": "Начать вылазку для группы",
-		"en": "Deploy squad"
+		"ru": "Начать игру",
+		"en": "Start game"
 	},
 	"COOP_WAITING_HOST": {
-		"ru": "Ожидание команды ведущего...",
-		"en": "Waiting for host deployment..."
+		"ru": "Ждём запуска от хоста...",
+		"en": "Waiting for host to start..."
 	},
 	"SETTINGS_TITLE": {
-		"ru": "Параметры",
+		"ru": "Настройки",
 		"en": "Settings"
 	},
 	"SET_SENS": {
-		"ru": "Чувствительность обзора",
+		"ru": "Чувствительность",
 		"en": "Look sensitivity"
 	},
 	"SET_VOL": {
-		"ru": "Общая громкость",
-		"en": "Master volume"
+		"ru": "Громкость",
+		"en": "Volume"
 	},
 	"SET_MIC": {
-		"ru": "Рация и микрофон",
-		"en": "Voice & microphone"
+		"ru": "Микрофон",
+		"en": "Microphone"
 	},
 	"MIC_AUTO": {
-		"ru": "Авто (голос слышен монстру)",
-		"en": "Auto (voice attracts monster)"
+		"ru": "Всегда (монстр слышит)",
+		"en": "Always on (monster hears you)"
 	},
 	"MIC_PTT": {
-		"ru": "По клавише [V]",
+		"ru": "По кнопке [V]",
 		"en": "Push-to-talk [V]"
 	},
 	"MIC_OFF": {
-		"ru": "Отключён",
-		"en": "Muted"
+		"ru": "Выкл",
+		"en": "Off"
 	},
 	"SET_LANG": {
 		"ru": "Язык: Русский",
 		"en": "Language: English"
 	},
 	"SET_GYRO": {
-		"ru": "Гироскоп (мобильный)",
+		"ru": "Гироскоп (телефон)",
 		"en": "Gyroscope (mobile)"
 	},
 	"SET_HAPTICS": {
-		"ru": "Виброотклик",
-		"en": "Haptics & vibration"
+		"ru": "Вибрация",
+		"en": "Vibration"
 	},
 	"SET_REDUCE_MOTION": {
-		"ru": "Уменьшить тряску и пульсацию",
-		"en": "Reduce motion & shake"
+		"ru": "Меньше тряски",
+		"en": "Reduce motion"
 	},
 	"ON": {
 		"ru": "Вкл",
@@ -162,45 +162,45 @@ const STRINGS: Dictionary = {
 		"en": "Off"
 	},
 	"HOW_TITLE": {
-		"ru": "Протокол выживания на объекте",
-		"en": "Facility survival protocol"
+		"ru": "Как играть",
+		"en": "How to play"
 	},
 	"HOW_BODY": {
-		"ru": "1. Бронешлюз эвакуации (Северный сектор):\n   Снимите 4 блокировки без каких-либо ограничений по времени:\n   · Сорвите доски монтировкой, перекусите силовой кабель болторезом.\n   · Установите предохранитель в энергоблоке и подайте ток.\n   · Найдите папку с кодом, откройте сейф охраны и заберите мастер-ключ.\n\n2. Повадки Слухача-07:\n   · Он слеп, но использует эхолокацию у дверных проёмов и проверяет подозрительные шкафы.\n   · Удерживайте [ПРОБЕЛ] (кнопку лёгких или [LT] на геймпаде), чтобы задержать дыхание, когда он пускает сонар или прислушивается к укрытию.\n   · Смотрите под ноги: битое стекло и ржавые коляски выдают вас грохотом.\n\n3. Управление, приманки и спасение группы:\n   · [WASD] шаг · [Shift] бег · [C / Ctrl] присед · [F] фонарь · [R] быстрая замена батареи из любого слота.\n   · [E / ЛКМ] действие · [ПКМ] применить расходник или бросить бутылку/фальшфейер напрямую · [G / Q] бросить или выложить предмет · [Tab / J] досье · [1–5 / Колесо] слоты · [V] рация.\n   · Геймпад (DualSense / Xbox): левый стик — шаг, правый — обзор, A/X — действие, B — присед, Y — фонарь, LB/RB — слоты, крестовина вниз — бросок, LT — дыхание, L3 — бег, View — досье.\n   · Откручивайте решётки вентиляции отвёрткой для тихого обхода; включайте громкоговорители и спасайте напарников из клетки в Хирургии.",
-		"en": "1. Evacuation blast gate (North sector):\n   Clear all 4 physical locks with zero time limit:\n   · Pry planks with the crowbar and cut the power cable with bolt cutters.\n   · Install the high-voltage fuse in the substation generator.\n   · Find the code dossier, unlock Security's wall safe, and take the master key.\n\n2. Listener-07 hunting behavior:\n   · Blind, but uses doorway echolocation clicks and sniffs suspicious lockers.\n   · Hold [SPACE] (or Lungs button / Gamepad [LT]) to hold your breath when he inspects your locker or emits sonar.\n   · Watch your step: broken glass shards and rusted wheelchairs make loud noise.\n\n3. Controls, lures & squad rescue:\n   · [WASD] move · [Shift] sprint · [C / Ctrl] crouch · [F] flashlight · [R] quick-reload battery from any inventory slot.\n   · [E / LMB] interact · [RMB] quick-use held consumable or throw bottle/flare directly · [G / Q] drop/throw · [Tab / J] dossier · [1–5 / Wheel] slots · [V] PTT radio.\n   · Gamepad (DualSense / Xbox): Left Stick move, Right Stick look, A/X interact, B crouch, Y flashlight, LB/RB cycle slots, D-Pad Down drop/throw, LT hold breath, L3 sprint toggle, Back/View dossier.\n   · Unscrew vent grates with a screwdriver for silent wing shortcuts; trigger PA sirens and rescue teammates from the Surgery cage."
+		"ru": "1. Сенсорное управление (телефон / планшет):\n- Левый стик: лёгкий наклон для шага, до внешнего края для бега.\n- Правая часть экрана: ведите пальцем для обзора, двойное касание для действия (двери, предметы, шкаф, сейф, генератор, клетка). Можно нажать и прямо на подсказку по центру.\n- Кнопки справа: фонарь, присед, задержка дыхания (удерживайте) и бросок/сброс (появляется, когда в руках предмет).\n\n2. Клавиатура и геймпад:\n- Клавиатура: WASD идти, Shift бежать, C / Ctrl присесть, E / ЛКМ действие, F фонарь, R сменить батарею, ПКМ / G / Q применить или бросить, Пробел задержать дыхание, Tab / J досье, 1-5 / Колесо слоты, V рация.\n- Геймпад: левый стик идти, правый обзор, A/X действие, B присед, Y фонарь, LB/RB слоты, вниз бросить, вверх батарея, LT дыхание, L3 бег, View досье.\n\n3. Выход через северный шлюз:\n- Таймера нет. Снимите 4 замка со шлюза: доски (монтировка), кабель (болторез), энергоблок (предохранитель), замок (мастер-ключ из сейфа).\n- Слухач-07 слеп, но прощупывает комнаты сонаром у дверей и проверяет шкафы. При звуке сонара или шагах у шкафа задержите дыхание. Битое стекло и коляски обходите в приседе.\n- Решётки вентиляции откручиваются отвёрткой без шума. Сирены на стенах отвлекают монстра, а пойманных напарников можно выпустить из клетки в Хирургии.",
+		"en": "1. Touch controls (phone / tablet):\n- Left stick: push lightly to walk, push to the outer ring to sprint.\n- Right side of screen: drag to look around, double-tap to interact with doors, items, lockers, the safe, generator, or cage. You can also tap the center prompt.\n- Right buttons: Flashlight, Crouch, Hold Breath (press and hold), and Drop/Throw (shown when holding an item).\n\n2. PC & Gamepad:\n- Keyboard: WASD move, Shift sprint, C / Ctrl crouch, E / Left Click interact, F flashlight, R swap battery, Right Click / G / Q use or drop, Space hold breath, Tab / J dossier, 1-5 / Wheel slots, V push-to-talk.\n- Gamepad: Left Stick move, Right Stick look, A/X interact, B crouch, Y flashlight, LB/RB slots, D-Pad Down drop, D-Pad Up swap battery, LT hold breath, L3 sprint, View dossier.\n\n3. Escaping NII-07:\n- Clear 4 locks on the North Airlock with no time limit: planks (crowbar), cable (bolt cutters), power unit (fuse), and padlock (master key inside the safe).\n- Listener-07 is blind. It clicks at doorways to scan rooms and checks lockers. Hold your breath when it scans or listens nearby, and crouch past broken glass and wheelchairs.\n- Use a screwdriver to open vents quietly, trigger intercom sirens to draw it away, and free trapped teammates from the Surgery cage."
 	},
 	# --- HUD, DOSSIER & INSTRUMENT READOUTS ---
 	"OBJ_HEADER": {
-		"ru": "Блокировки шлюза · %d из 4",
-		"en": "Airlock seals · %d of 4"
+		"ru": "Замки шлюза: %d/4",
+		"en": "Airlock locks: %d/4"
 	},
 	"OBJ_PLANKS": {
-		"ru": "Доски на створе (монтировка)",
-		"en": "Barricade planks (crowbar)"
+		"ru": "Доски (монтировка)",
+		"en": "Planks (crowbar)"
 	},
 	"OBJ_CABLE": {
-		"ru": "Силовой кабель (кусачки)",
-		"en": "Security cable (cutters)"
+		"ru": "Силовой кабель (болторез)",
+		"en": "Power cable (bolt cutters)"
 	},
 	"OBJ_POWER": {
-		"ru": "Питание энергоблока (предохранитель)",
-		"en": "Substation power (fuse)"
+		"ru": "Энергоблок (предохранитель)",
+		"en": "Power unit (fuse)"
 	},
 	"OBJ_PADLOCK": {
-		"ru": "Навесной замок (мастер-ключ из сейфа)",
-		"en": "Heavy padlock (safe master key)"
+		"ru": "Замок (ключ из сейфа)",
+		"en": "Padlock (master key in safe)"
 	},
 	"OBJ_OPEN_EXIT": {
-		"ru": "Все блокировки сняты — откройте северный шлюз",
-		"en": "All seals cleared — open north evacuation gate"
+		"ru": "Все замки сняты. Откройте северный шлюз.",
+		"en": "All locks cleared. Open the north gate."
 	},
 	"DOSSIER_BTN": {
 		"ru": "Досье [%d/4]",
 		"en": "Dossier [%d/4]"
 	},
 	"DOSSIER_HINT_KEY": {
-		"ru": "[TAB] Скрыть сводку",
-		"en": "[TAB] Hide dossier"
+		"ru": "Нажмите «Досье» снова, чтобы скрыть",
+		"en": "Tap Dossier again to hide"
 	},
 	"RADAR_RECON": {
 		"ru": "РАЗВЕДКА",
@@ -210,28 +210,36 @@ const STRINGS: Dictionary = {
 		"ru": "КАНАЛ %s",
 		"en": "CH %s"
 	},
+	"ACOUSTIC_TAG": {
+		"ru": "ШУМ",
+		"en": "NOISE"
+	},
+	"ACOUSTIC_HOLD": {
+		"ru": "ТИХО",
+		"en": "HOLD"
+	},
 	"VITALS_HEALTHY": {
-		"ru": "Пульс ровный",
+		"ru": "В норме",
 		"en": "Stable"
 	},
 	"VITALS_WOUNDED": {
-		"ru": "Тяжёлое ранение (нужна аптечка)",
-		"en": "Wounded (find medkit)"
+		"ru": "Ранен",
+		"en": "Wounded"
 	},
 	"VITALS_CAGED": {
-		"ru": "В изоляторе",
+		"ru": "В клетке",
 		"en": "Caged"
 	},
 	"BREATH_HOLDING": {
-		"ru": "Дыхание задержано",
+		"ru": "Задержка дыхания",
 		"en": "Holding breath"
 	},
 	"POSTURE_STAND": {
-		"ru": "В полный рост",
+		"ru": "Стоя",
 		"en": "Standing"
 	},
 	"POSTURE_CROUCH": {
-		"ru": "Присев (тихо)",
+		"ru": "Присев",
 		"en": "Crouching"
 	},
 	"POSTURE_HIDDEN": {
@@ -246,41 +254,37 @@ const STRINGS: Dictionary = {
 		"ru": "Ранен",
 		"en": "Downed"
 	},
-	"CONTROL_HINT_BAR": {
-		"ru": "[E] Действие · [ПКМ] Применить/Бросок · [R] Батарея · [F] Фонарь · [C] Присед · [ПРОБЕЛ] Дыхание",
-		"en": "[E] Interact · [RMB] Use/Throw · [R] Battery · [F] Light · [C] Crouch · [SPACE] Breath"
-	},
 	"STATUS_ECHOLOCATE": {
-		"ru": "Слухач-07 пускает эхолокацию — замрите или задержите дыхание",
-		"en": "Listener-07 echolocating — freeze or hold breath"
+		"ru": "Сонар Слухача-07. Замрите или не дышите.",
+		"en": "Sonar pulse. Freeze or hold breath."
 	},
 	"STATUS_SNIFFING": {
-		"ru": "Он прислушивается к укрытию — задержите дыхание [ПРОБЕЛ]",
-		"en": "He is listening at your hiding spot — hold breath [SPACE]"
+		"ru": "Он у двери шкафа. Задержите дыхание.",
+		"en": "It's right outside. Hold your breath."
 	},
 	"STATUS_STUNNED": {
-		"ru": "Слухач-07 оглушён вспышкой",
-		"en": "Listener-07 stunned by flare"
+		"ru": "Слухач-07 оглушён",
+		"en": "Listener-07 stunned"
 	},
 	"STATUS_ALERT": {
-		"ru": "Слухач-07 идёт на звук",
-		"en": "Listener-07 tracking sound"
+		"ru": "Слухач-07 идёт на шум",
+		"en": "Listener-07 heard a noise"
 	},
 	"STATUS_CHASE": {
-		"ru": "Погоня — разорвите линию обзора",
-		"en": "Pursuit — break line of sight"
+		"ru": "Погоня. Скройтесь из виду.",
+		"en": "Run. Break sight and hide."
 	},
 	"STATUS_HIDING": {
-		"ru": "В шкафу · [E] выйти · [ПРОБЕЛ] задержать дыхание",
-		"en": "In locker · [E] exit · [SPACE] hold breath"
+		"ru": "В шкафу. Не шумите.",
+		"en": "In locker. Stay quiet."
 	},
 	"STATUS_DOWNED": {
-		"ru": "Ранение — ползите к укрытию или ждите напарника (%d с)",
-		"en": "Downed — crawl to cover or await teammate (%ds)"
+		"ru": "Вы ранены. Ползите в укрытие или ждите помощи (%d с)",
+		"en": "Downed. Crawl to cover or wait for help (%ds)"
 	},
 	"STATUS_ALLY_DOWN": {
-		"ru": "Напарник %s ранен — отмечен на радаре",
-		"en": "Teammate %s downed — marked on radar"
+		"ru": "%s ранен, метка на радаре.",
+		"en": "%s is down. Check radar."
 	},
 	# --- ITEMS ---
 	"ITEM_crowbar": {
@@ -292,8 +296,8 @@ const STRINGS: Dictionary = {
 		"en": "Bolt cutters"
 	},
 	"ITEM_fuse": {
-		"ru": "Высоковольтный предохранитель",
-		"en": "High-voltage fuse"
+		"ru": "Предохранитель",
+		"en": "Power fuse"
 	},
 	"ITEM_key": {
 		"ru": "Мастер-ключ",
@@ -304,138 +308,138 @@ const STRINGS: Dictionary = {
 		"en": "Safe code: %s"
 	},
 	"ITEM_bottle": {
-		"ru": "Стеклянная бутылка (приманка)",
-		"en": "Glass bottle (decoy)"
+		"ru": "Стеклянная бутылка",
+		"en": "Glass bottle"
 	},
 	"ITEM_syringe": {
-		"ru": "Инъектор адреналина",
-		"en": "Adrenaline injector"
+		"ru": "Адреналин",
+		"en": "Adrenaline shot"
 	},
 	"ITEM_battery": {
-		"ru": "Аккумулятор фонаря",
-		"en": "Flashlight cell"
+		"ru": "Батарея",
+		"en": "Battery"
 	},
 	"ITEM_flare": {
-		"ru": "Шумовой фальшфейер (оглушает)",
-		"en": "Sonic flare (stuns stalker)"
+		"ru": "Фальшфейер",
+		"en": "Stun flare"
 	},
 	"ITEM_medkit": {
-		"ru": "Полевая аптечка (лечит раны)",
-		"en": "Field medkit (heals wounds)"
+		"ru": "Аптечка",
+		"en": "Medkit"
 	},
 	"ITEM_screwdriver": {
-		"ru": "Отвёртка (тихий доступ к вентиляции)",
-		"en": "Screwdriver (silent vent access)"
+		"ru": "Отвёртка",
+		"en": "Screwdriver"
 	},
 	# --- INTERACTION PROMPTS ---
 	"PROMPT_TAKE": {
-		"ru": "Взять · %s",
-		"en": "Take · %s"
+		"ru": "Взять: %s",
+		"en": "Take: %s"
 	},
 	"PROMPT_INV_FULL": {
-		"ru": "Свободных слотов нет — освободите руку [G]",
-		"en": "Inventory full — drop equipped item [G]"
+		"ru": "Нет места. Выбросьте предмет.",
+		"en": "Hands full. Drop something first."
 	},
 	"PROMPT_DOOR_OPEN": {
 		"ru": "Открыть дверь",
 		"en": "Open door"
 	},
 	"PROMPT_DOOR_CLOSE": {
-		"ru": "Прикрыть дверь",
+		"ru": "Закрыть дверь",
 		"en": "Close door"
 	},
 	"PROMPT_HIDE_LOCKER": {
-		"ru": "Укрыться в шкафу",
-		"en": "Hide inside locker"
+		"ru": "Спрятаться в шкафу",
+		"en": "Hide in locker"
 	},
 	"PROMPT_EXIT_LOCKER": {
 		"ru": "Выйти из шкафа",
-		"en": "Step out of locker"
+		"en": "Leave locker"
 	},
 	"PROMPT_SEARCH_DRAWER": {
-		"ru": "Осмотреть ящик",
+		"ru": "Обыскать ящик",
 		"en": "Search drawer"
 	},
 	"PROMPT_VENT_UNSCREW": {
-		"ru": "Тихо открутить решётку (отвёртка)",
-		"en": "Silently unscrew vent grate (screwdriver)"
+		"ru": "Открутить решётку (тихо)",
+		"en": "Unscrew vent (quiet)"
 	},
 	"PROMPT_VENT_FORCE": {
-		"ru": "Выбить решётку вентиляции (шумно)",
-		"en": "Wrench vent grate open (loud)"
+		"ru": "Выломать решётку (шумно)",
+		"en": "Rip open vent (loud)"
 	},
 	"PROMPT_PA_LURE": {
-		"ru": "Включить сирену в дальнем крыле (отвлечь монстра)",
-		"en": "Broadcast siren in distant wing (lure monster)"
+		"ru": "Включить сирену в другом крыле",
+		"en": "Sound distant siren"
 	},
 	"PROMPT_PA_COOLDOWN": {
-		"ru": "Интерком перезаряжается (%d с)",
+		"ru": "Сирена на паузе (%d с)",
 		"en": "Intercom recharging (%ds)"
 	},
 	"PROMPT_CAGE_UNLOCK": {
-		"ru": "Отодвинуть засов клетки изолятора",
-		"en": "Slide holding cage latch open"
+		"ru": "Открыть засов",
+		"en": "Open cage latch"
 	},
 	"PROMPT_SELF_REVIVE": {
-		"ru": "Вколоть адреналин и встать на ноги",
-		"en": "Inject adrenaline to self-revive"
+		"ru": "Вколоть адреналин",
+		"en": "Use adrenaline to get up"
 	},
 	"PROMPT_SAFE_ENTER": {
-		"ru": "Ввести 4-значный код сейфа",
-		"en": "Enter 4-digit safe code"
+		"ru": "Открыть сейф",
+		"en": "Enter safe code"
 	},
 	"PROMPT_SAFE_OPENED": {
-		"ru": "Сейф разблокирован",
-		"en": "Safe unlocked"
+		"ru": "Сейф открыт",
+		"en": "Safe open"
 	},
 	"PROMPT_GEN_NEED_FUSE": {
-		"ru": "Энергоблок обесточен — нужен предохранитель",
-		"en": "Substation offline — requires high-voltage fuse"
+		"ru": "Нет питания. Нужен предохранитель.",
+		"en": "No power. Needs a fuse."
 	},
 	"PROMPT_GEN_INSERT": {
-		"ru": "Установить предохранитель и подать питание",
-		"en": "Install fuse & restore facility power"
+		"ru": "Вставить предохранитель",
+		"en": "Insert fuse"
 	},
 	"PROMPT_GEN_ONLINE": {
-		"ru": "Питание подано на северный бронешлюз",
-		"en": "Power routed to north evacuation airlock"
+		"ru": "Питание подано",
+		"en": "Power on"
 	},
 	"PROMPT_EXIT_PRY": {
-		"ru": "Сорвать доски монтировкой",
-		"en": "Pry planks with crowbar"
+		"ru": "Оторвать доски",
+		"en": "Pry off planks"
 	},
 	"PROMPT_EXIT_CUT": {
-		"ru": "Перекусить силовой кабель",
-		"en": "Sever security cable"
+		"ru": "Перекусить кабель",
+		"en": "Cut power cable"
 	},
 	"PROMPT_EXIT_UNLOCK": {
-		"ru": "Открыть замок мастер-ключом",
-		"en": "Unlock padlock with master key"
+		"ru": "Открыть замок",
+		"en": "Unlock padlock"
 	},
 	"PROMPT_EXIT_ESCAPE": {
-		"ru": "Разблокировать бронешлюз и покинуть этаж",
-		"en": "Open blast gate & evacuate"
+		"ru": "Открыть шлюз и выйти",
+		"en": "Open airlock and escape"
 	},
 	"PROMPT_EXIT_LOCKED": {
-		"ru": "Шлюз заперт · осталось защит: %d",
-		"en": "Airlock sealed · %d locks remaining"
+		"ru": "Шлюз закрыт (осталось: %d)",
+		"en": "Airlock locked (%d left)"
 	},
 	"PROMPT_REVIVE_ALLY": {
-		"ru": "Поднять напарника · %s",
-		"en": "Revive teammate · %s"
+		"ru": "Поднять: %s",
+		"en": "Help %s up"
 	},
 	# --- MODALS & ENDINGS ---
 	"SAFE_MODAL_TITLE": {
-		"ru": "Терминал сейфа охраны",
-		"en": "Security safe keypad"
+		"ru": "Кодовый замок",
+		"en": "Safe keypad"
 	},
 	"SAFE_KNOWN_CODE": {
-		"ru": "Записанный код в досье: %s",
-		"en": "Recorded dossier code: %s"
+		"ru": "Код: %s",
+		"en": "Code: %s"
 	},
 	"SAFE_NO_NOTE": {
-		"ru": "Код неизвестен — осмотрите столы и картотеки комплекса",
-		"en": "Code unknown — search laboratory desks and archive cabinets"
+		"ru": "Код неизвестен. Ищите в столах и шкафах.",
+		"en": "Code unknown. Search desks and cabinets."
 	},
 	"PAUSE_TITLE": {
 		"ru": "Пауза",
@@ -446,121 +450,145 @@ const STRINGS: Dictionary = {
 		"en": "Resume"
 	},
 	"PAUSE_RESTART": {
-		"ru": "Новая вылазка",
-		"en": "New descent"
+		"ru": "Начать заново",
+		"en": "Restart"
 	},
 	"PAUSE_MAIN_MENU": {
-		"ru": "Главное меню",
+		"ru": "В меню",
 		"en": "Main menu"
 	},
 	"CAGE_TRANSITION_TITLE": {
-		"ru": "Хирургический изолятор",
-		"en": "Surgical holding cage"
+		"ru": "Клетка в Хирургии",
+		"en": "Surgery holding cage"
 	},
 	"CAGE_TRANSITION_SUB": {
-		"ru": "Слухач-07 запер вас в клетке западного блока. Снаряжение при вас — отоприте засов, когда шаги стихнут, и найдите аптечку.",
-		"en": "Listener-07 locked you in the West Surgery cage. Gear intact — unlatch the bars once footsteps fade and find a medkit."
+		"ru": "Слухач-07 запер вас в клетке. Вещи остались при вас. Откройте засов, когда шаги стихнут, и найдите аптечку.",
+		"en": "Listener-07 dragged you into the Surgery cage. Your gear is still on you. Open the latch once it leaves and find a medkit."
 	},
 	"VICTORY_TITLE": {
-		"ru": "Эвакуация завершена",
-		"en": "Evacuation complete"
+		"ru": "Вы выбрались",
+		"en": "You escaped"
 	},
 	"VICTORY_STATS": {
-		"ru": "Северный бронешлюз пройден  ·  Время на объекте: %s",
-		"en": "North blast gate cleared  ·  Time in facility: %s"
+		"ru": "Северный шлюз открыт  ·  Время: %s",
+		"en": "North airlock cleared  ·  Time: %s"
 	},
 	"GAMEOVER_TITLE": {
-		"ru": "Связь с группой потеряна",
-		"en": "Signal lost"
+		"ru": "Вы не выбрались",
+		"en": "You didn't make it"
 	},
 	"GAMEOVER_SUB": {
-		"ru": "Критические ранения не оставили шансов выбраться из комплекса НИИ-07.",
-		"en": "Critical trauma ended the escape attempt inside NII-07."
+		"ru": "Вы погибли в НИИ-07.",
+		"en": "You died inside NII-07."
 	},
 	"TOAST_SYRINGE_USED": {
-		"ru": "Адреналин введён — бесшумный рывок на 10 секунд",
-		"en": "Adrenaline active — silent sprint for 10 seconds"
+		"ru": "Адреналин: 10 секунд бега без шума",
+		"en": "Adrenaline shot: silent sprint for 10s"
 	},
 	"TOAST_MEDKIT_USED": {
-		"ru": "Раны перевязаны — здоровье полностью восстановлено",
-		"en": "Wounds treated — full resilience restored"
+		"ru": "Раны перевязаны",
+		"en": "Wounds patched up"
 	},
 	"TOAST_FLARE_USED": {
-		"ru": "Фальшфейер брошен — вспышка оглушит Слухача-07",
-		"en": "Sonic flare deployed — strobe shriek stuns Listener-07"
+		"ru": "Фальшфейер пошёл. Он оглушит Слухача-07.",
+		"en": "Flare out. It will stun Listener-07."
 	},
 	"TOAST_BATTERY_USED": {
-		"ru": "Аккумулятор заменён — заряд фонаря 100%",
-		"en": "Battery cell replaced — flashlight at 100%"
+		"ru": "Батарея заменена",
+		"en": "Fresh battery loaded"
 	},
 	"TOAST_CODE_FOUND": {
-		"ru": "В досье записан код сейфа: %s",
-		"en": "Safe code logged to dossier: %s"
+		"ru": "Код сейфа записан: %s",
+		"en": "Safe code saved: %s"
 	},
 	"TOAST_PA_TRIGGERED": {
-		"ru": "Сирена включена в секторе «%s» — Слухач-07 уходит на звук",
-		"en": "Siren triggered in %s — Listener-07 lured away"
+		"ru": "Сирена орёт в секторе «%s». Слухач-07 идёт туда.",
+		"en": "Siren active in %s. Monster heading there."
 	},
 	"TOAST_GASP": {
-		"ru": "Воздух закончился — громкий вдох выдал позицию",
-		"en": "Out of breath — loud gasp echoed nearby"
+		"ru": "Воздух кончился, вы громко вдохнули.",
+		"en": "Out of breath. You gasped loudly."
 	},
 	"TOAST_MP_SYNC": {
-		"ru": "Вы подключились к вылазке ведущего — мир синхронизирован",
-		"en": "Joined the host's descent — world synchronized"
+		"ru": "Подключено к игре хоста",
+		"en": "Connected to host"
 	},
 	"COOP_RELAY_HINT": {
-		"ru": "Через интернет: wss://-адрес туннеля ведущего. В одной Wi-Fi сети: ws://IP-адрес ведущего:8787",
-		"en": "Over internet: host's wss:// tunnel address. Same Wi-Fi: ws://HOST-IP:8787"
+		"ru": "Через интернет: wss:// адрес хоста. По одной Wi-Fi сети: ws://IP-хоста:8787",
+		"en": "Online: host's wss:// address. Same Wi-Fi: ws://HOST-IP:8787"
+	},
+	"COOP_STATUS_CONNECTING": {
+		"ru": "Подключаемся к серверу...",
+		"en": "Connecting..."
+	},
+	"COOP_STATUS_CONNECTED": {
+		"ru": "Связь есть. Создайте комнату или введите код.",
+		"en": "Connected. Create a room or enter a code."
+	},
+	"COOP_ERR_NOT_FOUND": {
+		"ru": "Комната не найдена. Проверьте код из 4 букв.",
+		"en": "Room not found. Check the 4-letter code."
+	},
+	"COOP_ERR_FULL": {
+		"ru": "Комната заполнена (4/4)",
+		"en": "Room full (4/4)"
+	},
+	"COOP_ERR_UNREACHABLE": {
+		"ru": "Сервер не отвечает. Проверьте, запущен ли он.",
+		"en": "Can't reach server. Make sure it's running."
+	},
+	"COOP_ERR_GENERIC": {
+		"ru": "Ошибка сервера: %s",
+		"en": "Server error: %s"
 	},
 	# --- FIELD ORIENTATION TUTORIAL ---
 	"TUT_HEADER": {
-		"ru": "Полевой инструктаж",
-		"en": "Field orientation"
+		"ru": "Подсказки",
+		"en": "Basics"
 	},
 	"TUT_SKIP": {
-		"ru": "Пропустить [K]",
-		"en": "Skip [K]"
+		"ru": "Пропустить",
+		"en": "Skip"
 	},
 	"TUT_NEXT": {
-		"ru": "Далее",
+		"ru": "Дальше",
 		"en": "Next"
 	},
 	"TUT_DONE": {
-		"ru": "Готово",
-		"en": "Done"
+		"ru": "Понятно",
+		"en": "Got it"
 	},
 	"TUT_STEP_1": {
-		"ru": "Двигайтесь [WASD] и нажмите [C], чтобы присесть — бег разносится эхом по всему НИИ-07.",
-		"en": "Move with [WASD] and press [C] to crouch silently — running echoes across NII-07."
+		"ru": "Ходите на WASD, приседайте на C. Бег слышно далеко по коридорам.",
+		"en": "Move with WASD and press C to crouch. Running echoes down the halls."
 	},
 	"TUT_STEP_2": {
-		"ru": "Переключите фонарь [F] и подберите стартовый инструмент [E] прямо впереди в палате Б-04.",
-		"en": "Toggle flashlight [F] and pick up the starter tool [E] right ahead in Ward B-04."
+		"ru": "Включите фонарь на F и подберите инструмент на E впереди, в палате Б-04.",
+		"en": "Press F for your flashlight and E to grab the tool ahead in Ward B-04."
 	},
 	"TUT_STEP_3": {
-		"ru": "Удерживайте [ПРОБЕЛ], чтобы задержать дыхание, когда Слухач-07 пускает сонар или проверяет шкаф.",
-		"en": "Hold [SPACE] to silence your breath when Listener-07 echolocates or sniffs your locker."
+		"ru": "Удерживайте Пробел, чтобы не дышать, когда Слухач-07 пускает сонар или проверяет шкаф.",
+		"en": "Hold Space to hold your breath when Listener-07 clicks nearby or checks your locker."
 	},
 	"TUT_STEP_4": {
-		"ru": "Нажмите [TAB], чтобы открыть Досье. Снимите 4 блокировки Северного шлюза — без лимита времени.",
-		"en": "Press [TAB] to check your Dossier. Clear all 4 locks on the North Airlock to escape — zero time limit."
+		"ru": "Откройте досье на Tab. Снимите 4 замка с Северного шлюза, таймера нет.",
+		"en": "Press Tab to open your Dossier. Clear all 4 North Airlock locks to get out."
 	},
 	"TUT_STEP_1_TOUCH": {
-		"ru": "Двигайтесь левым стиком и нажмите кнопку приседа — бег разносится эхом по всему НИИ-07.",
-		"en": "Move with the left thumbstick and tap Crouch to move silently — running echoes across NII-07."
+		"ru": "Двигайтесь левым стиком (до края для бега). Кнопка приседа справа делает шаги тише.",
+		"en": "Use the left stick to move (push to the edge to run) and tap Crouch to stay quiet."
 	},
 	"TUT_STEP_2_TOUCH": {
-		"ru": "Нажмите кнопку фонаря и подберите стартовый инструмент кнопкой действия в палате Б-04.",
-		"en": "Tap Flashlight and pick up the starter tool with the Interact button ahead in Ward B-04."
+		"ru": "Нажмите фонарь справа и дважды коснитесь правой части экрана, чтобы взять инструмент в палате Б-04.",
+		"en": "Tap Flashlight on the right, then double-tap the right side of the screen to grab the tool in Ward B-04."
 	},
 	"TUT_STEP_3_TOUCH": {
-		"ru": "Удерживайте кнопку лёгких, чтобы задержать дыхание при сонаре или проверке шкафа.",
-		"en": "Hold the Lungs button to silence your breath when Listener-07 echolocates or sniffs your locker."
+		"ru": "Удерживайте кнопку лёгких справа, когда Слухач-07 проверяет комнату или шкаф.",
+		"en": "Hold the Lungs button when Listener-07 scans the room or checks your locker."
 	},
 	"TUT_STEP_4_TOUCH": {
-		"ru": "Нажмите кнопку Досье вверху слева. Снимите 4 блокировки Северного шлюза — без лимита времени.",
-		"en": "Tap Dossier at top-left. Clear all 4 locks on the North Airlock to escape — zero time limit."
+		"ru": "Нажмите «Досье» вверху слева. Снимите 4 замка с Северного шлюза, таймера нет.",
+		"en": "Tap Dossier at top-left. Clear all 4 North Airlock locks to get out."
 	},
 	"SET_REPLAY_TUTORIAL": {
 		"ru": "Повторить обучение",

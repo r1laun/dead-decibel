@@ -1,8 +1,8 @@
 class_name LoSMinimapControl
 extends Control
 
-const SCOPE_CENTER := Vector2(102.0, 99.0)
-const SCOPE_RADIUS := 77.0
+const SCOPE_CENTER := Vector2(90.0, 90.0)
+const SCOPE_RADIUS := 74.0
 const WORLD_RANGE := 17.0
 const RAY_COUNT := 108
 
@@ -26,10 +26,7 @@ var vents_ref: Dictionary = {}
 
 var _open_doors_lookup: Dictionary = {}
 var _open_vents_lookup: Dictionary = {}
-var _wave_history: PackedFloat32Array = PackedFloat32Array()
-var _wave_accum: float = 0.0
 var _pulse_time: float = 0.0
-var _sweep_angle: float = -PI * 0.5
 var _echo_ping_dir: Vector2 = Vector2.ZERO
 var _echo_ping_alpha: float = 0.0
 var _mono_font: Font = null
@@ -37,10 +34,8 @@ var _mono_bold: Font = null
 
 
 func _ready() -> void:
-	custom_minimum_size = Vector2(204, 246)
+	custom_minimum_size = Vector2(180, 180)
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_wave_history.resize(48)
-	_wave_history.fill(0.0)
 
 	if ResourceLoader.exists("res://assets/fonts/IBMPlexMono-Regular.ttf"):
 		_mono_font = load("res://assets/fonts/IBMPlexMono-Regular.ttf") as Font
@@ -81,20 +76,7 @@ func _on_echolocation_pulsed(origin: Vector3) -> void:
 
 func tick_minimap(delta: float) -> void:
 	_pulse_time += delta
-	_sweep_angle = fmod(_sweep_angle + delta * 1.45, TAU)
 	_echo_ping_alpha = move_toward(_echo_ping_alpha, 0.0, delta * 0.65)
-
-	_wave_accum += delta
-	if _wave_accum >= 0.04:
-		_wave_accum = 0.0
-		var nl := AcousticBus.current_noise_level
-		for i in range(_wave_history.size() - 1):
-			_wave_history[i] = _wave_history[i + 1]
-		var jitter := sin(_pulse_time * 37.0) * cos(_pulse_time * 19.0)
-		var sample := jitter * (0.03 + nl * 0.92)
-		if player != null and player.is_holding_breath:
-			sample *= 0.22
-		_wave_history[_wave_history.size() - 1] = clampf(sample, -1.0, 1.0)
 
 	_open_doors_lookup.clear()
 	for d in doors_ref:
@@ -163,36 +145,26 @@ func _draw() -> void:
 	var in_chase := (monster_director != null and monster_director.active and monster_director.state == MonsterDirector.STATE_CHASE)
 	var bezel_accent := COL_SIGNAL if in_chase else (COL_SODIUM if _echo_ping_alpha > 0.1 else Color(COL_PHOSPHOR, 0.45))
 
-	# 1. Outer Instrument Housing & Corner Registration Ticks
-	var scope_box := Rect2(Vector2(4, 2), Vector2(196, 188))
-	_draw_corner_ticks(scope_box, Color(bezel_accent, 0.65), 9.0)
+	# 1. Square-Framed Static Instrument Housing & Corner Registration Ticks
+	var scope_box := Rect2(Vector2(2, 2), Vector2(176, 176))
+	draw_rect(scope_box, Color(COL_PANEL.r, COL_PANEL.g, COL_PANEL.b, 0.72), true)
+	draw_rect(scope_box, COL_RULE, false, 1.0)
+	_draw_corner_ticks(scope_box, Color(bezel_accent, 0.75), 9.0)
 
-	# CRT Glass & Recessed Bezel
-	draw_circle(SCOPE_CENTER, SCOPE_RADIUS + 4.5, COL_PANEL)
+	# Static Tactical Glass & Recessed Bezel
+	draw_circle(SCOPE_CENTER, SCOPE_RADIUS + 4.0, COL_PANEL)
 	draw_circle(SCOPE_CENTER, SCOPE_RADIUS, COL_INK)
 	draw_circle(SCOPE_CENTER, SCOPE_RADIUS * 0.72, Color(COL_PHOSPHOR, 0.025))
 	draw_circle(SCOPE_CENTER, SCOPE_RADIUS * 0.36, Color(COL_PHOSPHOR, 0.035))
-
-	# Subtle CRT Horizontal Scanlines clipped to scope circle
-	var scan_y := -SCOPE_RADIUS + 4.0
-	while scan_y < SCOPE_RADIUS - 2.0:
-		var chord := sqrt(maxf(0.0, (SCOPE_RADIUS - 1.5) * (SCOPE_RADIUS - 1.5) - scan_y * scan_y))
-		draw_line(
-			SCOPE_CENTER + Vector2(-chord, scan_y),
-			SCOPE_CENTER + Vector2(chord, scan_y),
-			Color(COL_PHOSPHOR, 0.03),
-			1.0
-		)
-		scan_y += 4.0
 
 	# 5m, 10m, 15m Concentric Range Rings
 	var px_per_m: float = SCOPE_RADIUS / WORLD_RANGE
 	for meters: float in [5.0, 10.0, 15.0]:
 		var rr: float = meters * px_per_m
-		draw_arc(SCOPE_CENTER, rr, 0.0, TAU, 56, Color(COL_PHOSPHOR, 0.14), 1.0, true)
+		draw_arc(SCOPE_CENTER, rr, 0.0, TAU, 56, Color(COL_PHOSPHOR, 0.15), 1.0, true)
 		if _mono_font != null:
 			var label_m := "%d" % int(meters)
-			draw_string(_mono_font, SCOPE_CENTER + Vector2(3.0, -rr + 9.0), label_m, HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Color(COL_PHOSPHOR, 0.42))
+			draw_string(_mono_font, SCOPE_CENTER + Vector2(3.0, -rr + 9.0), label_m, HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Color(COL_PHOSPHOR, 0.48))
 
 	# Outer Degree Ticks (every 15 deg, major every 45 deg)
 	for deg_idx in range(24):
@@ -204,8 +176,8 @@ func _draw() -> void:
 		draw_line(SCOPE_CENTER + dir * r_in, SCOPE_CENTER + dir * SCOPE_RADIUS, t_col, 1.2 if major else 1.0)
 
 	# Outer Rim Hairline
-	draw_arc(SCOPE_CENTER, SCOPE_RADIUS, 0.0, TAU, 72, Color(COL_PHOSPHOR, 0.34), 1.5, true)
-	draw_arc(SCOPE_CENTER, SCOPE_RADIUS + 4.5, 0.0, TAU, 72, COL_RULE, 1.0, true)
+	draw_arc(SCOPE_CENTER, SCOPE_RADIUS, 0.0, TAU, 72, Color(COL_PHOSPHOR, 0.36), 1.5, true)
+	draw_arc(SCOPE_CENTER, SCOPE_RADIUS + 4.0, 0.0, TAU, 72, COL_RULE, 1.0, true)
 
 	# Crosshair Hairlines with Open Center Gap
 	draw_line(SCOPE_CENTER + Vector2(-SCOPE_RADIUS + 6.0, 0), SCOPE_CENTER + Vector2(-8.0, 0), Color(COL_PHOSPHOR, 0.10), 1.0)
@@ -213,25 +185,7 @@ func _draw() -> void:
 	draw_line(SCOPE_CENTER + Vector2(0, -SCOPE_RADIUS + 6.0), SCOPE_CENTER + Vector2(0, -8.0), Color(COL_PHOSPHOR, 0.10), 1.0)
 	draw_line(SCOPE_CENTER + Vector2(0, 8.0), SCOPE_CENTER + Vector2(0, SCOPE_RADIUS - 6.0), Color(COL_PHOSPHOR, 0.10), 1.0)
 
-	# 2. Rotating Phosphor Sweep Trail (disabled if reduce_motion)
-	if not reduce_motion:
-		var trail_slices := 10
-		var trail_arc := 0.52
-		for s_i in range(trail_slices):
-			var f0 := float(s_i) / float(trail_slices)
-			var f1 := float(s_i + 1) / float(trail_slices)
-			var a0 := _sweep_angle - trail_arc * (1.0 - f0)
-			var a1 := _sweep_angle - trail_arc * (1.0 - f1)
-			var tri := PackedVector2Array([
-				SCOPE_CENTER,
-				SCOPE_CENTER + Vector2(cos(a0), sin(a0)) * (SCOPE_RADIUS - 1.5),
-				SCOPE_CENTER + Vector2(cos(a1), sin(a1)) * (SCOPE_RADIUS - 1.5)
-			])
-			draw_colored_polygon(tri, Color(COL_PHOSPHOR, 0.095 * f1 * f1))
-		var sweep_end := SCOPE_CENTER + Vector2(cos(_sweep_angle), sin(_sweep_angle)) * (SCOPE_RADIUS - 1.5)
-		draw_line(SCOPE_CENTER, sweep_end, Color(COL_PHOSPHOR, 0.48), 1.4, true)
-
-	# 3. Real-Time Line-of-Sight Raycast & Contacts
+	# 2. Real-Time Line-of-Sight Raycast & Contacts (Static visibility cone, no sweep beam)
 	if player != null and not wall_segments.is_empty():
 		var p_xz := Vector2(player.global_position.x, player.global_position.z)
 		var yaw := player.rotation.y
@@ -302,7 +256,7 @@ func _draw() -> void:
 			hit_kinds.append(best_kind)
 
 		fan_pts.append(fan_pts[1])
-		var cone_col := Color(COL_SODIUM, 0.065) if player.flashlight_on else Color(COL_PHOSPHOR, 0.06)
+		var cone_col := Color(COL_SODIUM, 0.075) if player.flashlight_on else Color(COL_PHOSPHOR, 0.065)
 		for i in range(1, fan_pts.size() - 1):
 			var tri := PackedVector2Array([SCOPE_CENTER, fan_pts[i], fan_pts[i + 1]])
 			draw_colored_polygon(tri, cone_col)
@@ -326,22 +280,22 @@ func _draw() -> void:
 					draw_line(p1, p2, Color(col, 0.22), w + 2.2, true)
 					draw_line(p1, p2, col, w, true)
 
-		# Rotating North Azimuth Tick + N Glyph on Bezel
+		# North Azimuth Tick + N Glyph on Bezel
 		var north_scr := _world_to_scope(p_xz + Vector2(0, -WORLD_RANGE), p_xz, cos_y, sin_y, px_per_m)
 		var n_dir := (north_scr - SCOPE_CENTER).normalized()
-		draw_line(SCOPE_CENTER + n_dir * (SCOPE_RADIUS - 5.0), SCOPE_CENTER + n_dir * (SCOPE_RADIUS + 3.5), COL_SODIUM, 2.0, true)
+		draw_line(SCOPE_CENTER + n_dir * (SCOPE_RADIUS - 5.0), SCOPE_CENTER + n_dir * (SCOPE_RADIUS + 3.0), COL_SODIUM, 2.0, true)
 		if _mono_bold != null:
-			var n_pos := SCOPE_CENTER + n_dir * (SCOPE_RADIUS + 9.5)
+			var n_pos := SCOPE_CENTER + n_dir * (SCOPE_RADIUS + 8.5)
 			draw_string(_mono_bold, n_pos + Vector2(-3.5, 4.0), "N", HORIZONTAL_ALIGNMENT_LEFT, -1, 10, COL_SODIUM)
 
-		# 4. Distant Echolocation Directional Rim Arc
+		# 3. Distant Echolocation Directional Rim Arc
 		if _echo_ping_alpha > 0.02 and _echo_ping_dir.length() > 0.1:
 			var ep_scr := _world_to_scope(p_xz + _echo_ping_dir * WORLD_RANGE, p_xz, cos_y, sin_y, px_per_m)
 			var ep_ang := (ep_scr - SCOPE_CENTER).angle()
 			draw_arc(SCOPE_CENTER, SCOPE_RADIUS - 3.0, ep_ang - 0.44, ep_ang + 0.44, 18, Color(COL_SIGNAL, _echo_ping_alpha * 0.92), 3.0, true)
 			draw_arc(SCOPE_CENTER, SCOPE_RADIUS - 7.0, ep_ang - 0.28, ep_ang + 0.28, 14, Color(COL_SODIUM, _echo_ping_alpha * 0.65), 1.5, true)
 
-		# 5. Specimen-07 Blip (ONLY if directly visible in Player's Line-of-Sight!)
+		# 4. Listener-07 LoS Diamond (ONLY if directly visible in Player's Line-of-Sight!)
 		if monster_director != null and monster_director.active and monster_director.stalker_node != null:
 			if monster_director.is_visible_from_point(player.camera.global_position):
 				var m_xz := Vector2(monster_director.stalker_node.global_position.x, monster_director.stalker_node.global_position.z)
@@ -360,7 +314,7 @@ func _draw() -> void:
 					draw_colored_polygon(d_pts, COL_SIGNAL)
 					draw_circle(m_scr, 1.8, COL_PAPER)
 
-		# 6. Co-op Squad Transponder Beacons (with anti-overlap label placement)
+		# 5. Co-op Squad Transponder Beacons (with anti-overlap label placement)
 		var placed_label_rects: Array[Rect2] = []
 		for pid in remote_players.keys():
 			var rp: RemoteListener = remote_players[pid]
@@ -424,7 +378,7 @@ func _draw() -> void:
 					var h_r := 7.0 if reduce_motion else (6.0 + 3.0 * absf(sin(_pulse_time * 5.0)))
 					draw_arc(tip, h_r, 0.0, TAU, 16, Color(COL_SIGNAL, 0.78), 1.5, true)
 
-	# 7. Player Center Chevron (Facing Up)
+	# 6. Player Center Chevron (Facing Up)
 	var self_pts := PackedVector2Array([
 		SCOPE_CENTER + Vector2(0, -6.0),
 		SCOPE_CENTER + Vector2(4.4, 4.4),
@@ -432,42 +386,3 @@ func _draw() -> void:
 		SCOPE_CENTER + Vector2(-4.4, 4.4)
 	])
 	draw_colored_polygon(self_pts, COL_PAPER)
-
-	# 8. Gridded Cathode Oscilloscope Plate Below Scope (y = 196..244)
-	var plate_rect := Rect2(Vector2(6, 196), Vector2(192, 48))
-	draw_rect(plate_rect, COL_INK, true)
-	draw_rect(plate_rect, COL_RULE, false, 1.0)
-	_draw_corner_ticks(plate_rect, Color(COL_PHOSPHOR, 0.42), 6.0)
-
-	# Graticule grid inside oscilloscope
-	for gx_i in range(1, 6):
-		var gx := lerpf(plate_rect.position.x, plate_rect.end.x, float(gx_i) / 6.0)
-		draw_line(Vector2(gx, plate_rect.position.y + 3.0), Vector2(gx, plate_rect.end.y - 3.0), Color(COL_PHOSPHOR, 0.065), 1.0)
-	var mid_y := plate_rect.position.y + plate_rect.size.y * 0.56
-	draw_line(Vector2(plate_rect.position.x + 4.0, mid_y), Vector2(plate_rect.end.x - 4.0, mid_y), Color(COL_PHOSPHOR, 0.12), 1.0)
-	draw_line(Vector2(plate_rect.position.x + 4.0, mid_y - 11.0), Vector2(plate_rect.end.x - 4.0, mid_y - 11.0), Color(COL_PHOSPHOR, 0.05), 1.0)
-	draw_line(Vector2(plate_rect.position.x + 4.0, mid_y + 11.0), Vector2(plate_rect.end.x - 4.0, mid_y + 11.0), Color(COL_PHOSPHOR, 0.05), 1.0)
-
-	var nl_cur := AcousticBus.current_noise_level
-	var trace_col := COL_SIGNAL if nl_cur >= 0.45 else (
-		COL_SODIUM if nl_cur >= 0.18 else COL_PHOSPHOR
-	)
-	if player != null and player.is_holding_breath:
-		trace_col = COL_COLD
-
-	if _mono_font != null:
-		var tag_left := "HOLD" if (player != null and player.is_holding_breath) else "ACOUSTIC"
-		draw_string(_mono_font, plate_rect.position + Vector2(6.0, 11.5), tag_left, HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Color(trace_col, 0.78))
-		var db_val := clampi(int(round(nl_cur * 96.0)), 0, 99)
-		var db_str := "%02d dB" % db_val
-		draw_string(_mono_bold, Vector2(plate_rect.end.x - 38.0, plate_rect.position.y + 11.5), db_str, HORIZONTAL_ALIGNMENT_LEFT, -1, 10, trace_col)
-
-	var poly := PackedVector2Array()
-	var n_pts := _wave_history.size()
-	for i in range(n_pts):
-		var px := lerpf(plate_rect.position.x + 6.0, plate_rect.end.x - 6.0, float(i) / float(max(1, n_pts - 1)))
-		var py := mid_y - _wave_history[i] * 14.0
-		poly.append(Vector2(px, py))
-	if poly.size() >= 2:
-		draw_polyline(poly, Color(trace_col, 0.25), 3.4, true)
-		draw_polyline(poly, trace_col, 1.5, true)

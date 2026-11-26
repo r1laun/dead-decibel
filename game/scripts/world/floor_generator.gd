@@ -289,6 +289,8 @@ static func _add_wall_with_door(
 		piv = door_inst
 
 	var door_sb := StaticBody3D.new()
+	door_sb.collision_layer = 16
+	door_sb.collision_mask = 0
 	door_sb.position = Vector3(DOOR_W * 0.46, DOOR_H * 0.5, 0.0)
 	door_sb.set_meta("interact_type", "door")
 	door_sb.set_meta("door_id", door_id)
@@ -313,7 +315,9 @@ static func _add_wall_with_door(
 		"is_open": false,
 		"angle": 0.0,
 		"target_angle": 0.0,
-		"world_pos": Vector3(world_door_pos.x, 0.0, world_door_pos.y)
+		"world_pos": Vector3(world_door_pos.x, 0.0, world_door_pos.y),
+		"dir": Vector3(dir.x, 0.0, dir.y),
+		"normal": Vector3(-dir.y, 0.0, dir.x)
 	})
 
 
@@ -1076,7 +1080,7 @@ static func build_facility_map(parent: Node3D, rng_seed: int) -> Dictionary:
 			"node": linst,
 			"door_pivot": AssetLibrary.find_child_by_prefix(linst, "DoorPivot") as Node3D,
 			"collider": lsb,
-			"inside_pos": lpos + Vector3(0, 0.05, 0),
+			"inside_pos": lpos + fwd * 0.22 + Vector3(0, 0.05, 0),
 			"exit_pos": lpos + fwd * 1.18,
 			"look_yaw": lyaw,
 			"occupied": false

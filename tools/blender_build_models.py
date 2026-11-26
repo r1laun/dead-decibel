@@ -450,23 +450,37 @@ def build_locker_metal() -> None:
     add_box_obj("BottomFloor", (W, D, 0.06), (0, 0, 0.03), mat_dark, parent=root, bevel=0.006)
     add_box_obj("TopRoof", (W + 0.02, D + 0.02, 0.06), (0, 0, H - 0.03), mat_steel, parent=root, bevel=0.008)
 
-    # Hinged Door with physical gap slits at eye level (z = 1.42 .. 1.76) so hiding player sees out!
+    # Hinged Door with clear eye-level horizontal louver viewing window (z = 1.34 .. 1.84)
+    # Player camera inside locker sits at y ~ 1.59m, aligned with the unobstructed center band (1.56..1.66)!
     door_piv = make_empty("DoorPivot", (-W * 0.5 + 0.03, D * 0.5 - 0.02, 0.0), parent=root)
     dw = W - 0.06
     cx = dw * 0.5
-    # Lower solid panel (0.05 .. 1.38)
-    add_box_obj("DoorLow", (dw, 0.035, 1.32), (cx, 0, 0.72), mat_steel, parent=door_piv, bevel=0.006)
-    # Side stiles around eye-level vent opening (1.38 .. 1.82)
-    add_box_obj("DoorStileL", (0.12, 0.035, 0.46), (0.06, 0, 1.60), mat_steel, parent=door_piv, bevel=0.004)
-    add_box_obj("DoorStileR", (0.12, 0.035, 0.46), (dw - 0.06, 0, 1.60), mat_steel, parent=door_piv, bevel=0.004)
-    # Louver slats with open gaps between them!
-    for si in range(4):
-        sz = 1.43 + si * 0.105
-        add_box_obj(f"VentSlat_{si}", (dw - 0.22, 0.035, 0.038), (cx, 0.005, sz), mat_steel, rot=(0.22, 0, 0), parent=door_piv, bevel=0.003)
-    # Top solid header (1.82 .. 2.10)
-    add_box_obj("DoorTop", (dw, 0.035, 0.28), (cx, 0, 1.96), mat_steel, parent=door_piv, bevel=0.006)
-    # Recessed handle
-    add_box_obj("DoorHandle", (0.04, 0.07, 0.18), (dw - 0.09, 0.035, 1.08), mat_dark, parent=door_piv, bevel=0.008)
+    # Lower solid panel (0.05 .. 1.34)
+    add_box_obj("DoorLow", (dw, 0.035, 1.29), (cx, 0, 0.695), mat_steel, parent=door_piv, bevel=0.006)
+    # Slim side stiles around eye-level viewing aperture (z = 1.34 .. 1.84)
+    stile_w = 0.08
+    add_box_obj("DoorStileL", (stile_w, 0.035, 0.50), (stile_w * 0.5, 0, 1.59), mat_steel, parent=door_piv, bevel=0.004)
+    add_box_obj("DoorStileR", (stile_w, 0.035, 0.50), (dw - stile_w * 0.5, 0, 1.59), mat_steel, parent=door_piv, bevel=0.004)
+    # 3 ultra-thin horizontal iron louvers (thickness 0.014m, gently tilted, 0.13m spacing)
+    # Leaves a wide unobstructed eye-level center band around z = 1.56 .. 1.66!
+    slat_w = dw - stile_w * 2.0
+    for si, sz in enumerate((1.42, 1.55, 1.68)):
+        add_box_obj(
+            f"VentSlat_{si}",
+            (slat_w, 0.030, 0.014),
+            offset=(0.0, 0.0, 0.0),
+            mat=mat_steel,
+            loc=(cx, 0.003, sz),
+            rot=(0.14, 0, 0),
+            parent=door_piv,
+            bevel=0.002,
+        )
+    # Top solid header (1.84 .. 2.10)
+    add_box_obj("DoorTop", (dw, 0.035, 0.26), (cx, 0, 1.97), mat_steel, parent=door_piv, bevel=0.006)
+    # Door hinges & recessed handle
+    for hz in (0.36, 1.05, 1.88):
+        add_cyl_obj(f"DoorHinge_{hz}", 0.014, 0.014, 0.08, 10, offset=(0.01, 0.02, hz), mat=mat_dark, parent=door_piv)
+    add_box_obj("DoorHandle", (0.04, 0.07, 0.18), (dw - 0.07, 0.035, 1.08), mat_dark, parent=door_piv, bevel=0.008)
 
     export_glb("locker_metal.glb")
 
@@ -758,12 +772,5 @@ def build_items_and_props() -> None:
 
 
 if __name__ == "__main__":
-    build_monster_stalker()
-    build_survivor_hazmat()
     build_locker_metal()
-    build_desk_hide()
-    build_door_heavy()
-    build_exit_airlock()
-    build_containers_and_puzzles()
-    build_items_and_props()
-    print("ALL_BLENDER_GLB_MODELS_COMPLETE")
+    print("LOCKER_METAL_GLB_COMPLETE")

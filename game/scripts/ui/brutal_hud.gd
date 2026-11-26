@@ -34,6 +34,171 @@ const COL_ACCENT := COL_SODIUM
 const COL_DANGER := COL_SIGNAL
 const COL_OK := COL_PHOSPHOR
 
+const JOY_SIZE := 168.0
+const JOY_KNOB_SIZE := 66.0
+const JOY_REST_POS := Vector2(51.0, 51.0)
+const JOY_MAX_R := 66.0
+const JOY_SPRINT_RATIO := 0.75
+
+
+class AcousticScopeControl extends Control:
+	var mono_font: Font = null
+	var mono_bold: Font = null
+	var is_holding_breath: bool = false
+	var chase_flare: float = 0.0
+	var _wave_history: PackedFloat32Array = PackedFloat32Array()
+	var _wave_accum: float = 0.0
+	var _pulse_time: float = 0.0
+
+	func _init() -> void:
+		custom_minimum_size = Vector2(188, 38)
+		mouse_filter = Control.MOUSE_FILTER_IGNORE
+		_wave_history.resize(44)
+		_wave_history.fill(0.0)
+
+	func tick(delta: float, holding_breath: bool) -> void:
+		is_holding_breath = holding_breath
+		_pulse_time += delta
+		_wave_accum += delta
+		if _wave_accum >= 0.04:
+			_wave_accum = 0.0
+			var nl := AcousticBus.current_noise_level
+			for i in range(_wave_history.size() - 1):
+				_wave_history[i] = _wave_history[i + 1]
+			var jitter := sin(_pulse_time * 37.0) * cos(_pulse_time * 19.0)
+			var sample := jitter * (0.03 + nl * 0.92)
+			if is_holding_breath:
+				sample *= 0.22
+			_wave_history[_wave_history.size() - 1] = clampf(sample, -1.0, 1.0)
+		queue_redraw()
+
+	func _draw() -> void:
+		var sz := size
+		if sz.x < 24.0 or sz.y < 16.0:
+			return
+		var rect := Rect2(Vector2.ZERO, sz)
+		var bg_col := COL_INK.lerp(Color(0.18, 0.03, 0.03, 0.98), chase_flare * 0.45)
+		var brd_col := COL_RULE.lerp(COL_SIGNAL, chase_flare)
+		draw_rect(rect, bg_col, true)
+		draw_rect(rect, brd_col, false, lerpf(1.0, 2.2, chase_flare))
+
+		for gx_i in range(1, 6):
+			var gx := lerpf(2.0, sz.x - 2.0, float(gx_i) / 6.0)
+			draw_line(Vector2(gx, 2.0), Vector2(gx, sz.y - 2.0), Color(COL_PHOSPHOR, 0.07), 1.0)
+
+		var mid_y := sz.y * 0.62
+		draw_line(Vector2(3.0, mid_y), Vector2(sz.x - 3.0, mid_y), Color(COL_PHOSPHOR, 0.14), 1.0)
+
+		var nl_cur := AcousticBus.current_noise_level
+		var trace_col := COL_SIGNAL if (nl_cur >= 0.45 or chase_flare > 0.35) else (
+			COL_SODIUM if nl_cur >= 0.18 else COL_PHOSPHOR
+		)
+		if is_holding_breath:
+			trace_col = COL_COLD
+
+		if mono_font != null:
+			var tag_left := Loc.t("ACOUSTIC_HOLD") if is_holding_breath else Loc.t("ACOUSTIC_TAG")
+			draw_string(mono_font, Vector2(6.0, 12.0), tag_left, HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color(trace_col, 0.85))
+			var db_val := clampi(int(round(nl_cur * 96.0)), 0, 99)
+			var db_str := "%02d dB" % db_val
+			var f_bold := mono_bold if mono_bold != null else mono_font
+			draw_string(f_bold, Vector2(sz.x - 46.0, 12.0), db_str, HORIZONTAL_ALIGNMENT_LEFT, -1, 11, trace_col)
+
+		var poly := PackedVector2Array()
+		var n_pts := _wave_history.size()
+		for i in range(n_pts):
+			var px := lerpf(5.0, sz.x - 5.0, float(i) / float(max(1, n_pts - 1)))
+			var py := mid_y - _wave_history[i] * (sz.y * 0.30)
+			poly.append(Vector2(px, py))
+		if poly.size() >= 2:
+			draw_polyline(poly, Color(trace_col, 0.25), 3.2, true)
+			draw_polyline(poly, trace_col, 1.5, true)
+
+
+class ChaseInterferenceOverlay extends Control:
+	var intensity: float = 0.0
+	var proximity: float = 0.0
+	var pulse_time: float = 0.0
+	var reduce_motion: bool = false
+
+	func _init() -> void:
+		set_anchors_preset(Control.PRESET_FULL_RECT)
+		mouse_filter = Control.MOUSE_FILTER_IGNORE
+		visible = false
+
+	func update_state(p_intensity: float, p_proximity: float, p_pulse_time: float, p_reduce_motion: bool) -> void:
+		intensity = clampf(p_intensity, 0.0, 1.0)
+		proximity = clampf(p_proximity, 0.0, 1.0)
+		pulse_time = p_pulse_time
+		reduce_motion = p_reduce_motion
+		visible = intensity > 0.005 and not reduce_motion
+		if visible:
+			queue_redraw()
+
+	func _draw() -> void:
+		if intensity <= 0.005 or reduce_motion:
+			return
+		var sz := size
+		if sz.x < 16.0 or sz.y < 16.0:
+			return
+
+		var pulse := 0.5 + 0.5 * sin(pulse_time * 9.5)
+		var fast_flick := 0.5 + 0.5 * sin(pulse_time * 31.0 + cos(pulse_time * 17.0))
+
+		# Dynamic tunnel-vision tightening borders synced to stalker proximity (< 16m)
+		var squeeze := lerpf(0.035, 0.135, proximity) * intensity
+		var band_w := sz.x * squeeze * (0.94 + 0.10 * pulse)
+		var band_h := sz.y * squeeze * (0.94 + 0.10 * pulse)
+		for b_i in range(3):
+			var frac := float(3 - b_i) / 3.0
+			var bw := band_w * frac
+			var bh := band_h * frac
+			var edge_a := intensity * (0.14 + 0.16 * proximity) * (1.15 - frac * 0.45)
+			var edge_col := Color(0.055, 0.012, 0.014, clampf(edge_a, 0.0, 0.62))
+			draw_rect(Rect2(0.0, 0.0, sz.x, bh), edge_col, true)
+			draw_rect(Rect2(0.0, sz.y - bh, sz.x, bh), edge_col, true)
+			draw_rect(Rect2(0.0, bh, bw, maxf(0.0, sz.y - bh * 2.0)), edge_col, true)
+			draw_rect(Rect2(sz.x - bw, bh, bw, maxf(0.0, sz.y - bh * 2.0)), edge_col, true)
+
+		# Erratic horizontal signal-interference panic bars & dark/crimson tears
+		var phase := int(floor(pulse_time * 24.0))
+		var tear_count := int(round(lerpf(4.0, 12.0, proximity)))
+		for i in range(tear_count):
+			var seed_v := (i * 53 + phase * 29) % 101
+			var y_norm := float(seed_v) / 101.0
+			if y_norm > 0.36 and y_norm < 0.64:
+				y_norm = y_norm * 0.45 if (i % 2 == 0) else 1.0 - (1.0 - y_norm) * 0.45
+			var bar_y := y_norm * sz.y
+			var bar_h := 1.5 + float((i + phase) % 3) * 1.4
+			var bar_w := sz.x * lerpf(0.28, 0.96, float((seed_v * 7) % 19) / 18.0)
+			var x_off := float(((i * 19 + phase * 11) % 31) - 15) * 3.5
+			if (i + phase) % 3 == 0:
+				var dark_a := intensity * (0.18 + 0.22 * proximity) * (0.6 + 0.4 * fast_flick)
+				draw_rect(Rect2(clampf(x_off, 0.0, sz.x * 0.4), bar_y, bar_w, bar_h), Color(COL_INK.r, COL_INK.g, COL_INK.b, dark_a), true)
+			else:
+				var sig_a := intensity * (0.10 + 0.22 * proximity) * (0.55 + 0.45 * fast_flick)
+				draw_rect(Rect2(clampf(x_off, 0.0, sz.x * 0.4), bar_y, bar_w, bar_h), Color(COL_SIGNAL.r, COL_SIGNAL.g, COL_SIGNAL.b, sig_a), true)
+
+		# Pulsing red corner panic brackets synced to proximity
+		var inset := lerpf(28.0, 14.0, proximity)
+		var br_len := lerpf(22.0, 42.0, proximity)
+		var br_a := intensity * (0.35 + 0.45 * pulse) * lerpf(0.65, 1.0, proximity)
+		var br_col := Color(COL_SIGNAL.r, COL_SIGNAL.g, COL_SIGNAL.b, clampf(br_a, 0.0, 0.92))
+		var br_w := lerpf(1.6, 2.8, proximity)
+		var x0 := inset
+		var y0 := inset
+		var x1 := sz.x - inset
+		var y1 := sz.y - inset
+		draw_line(Vector2(x0, y0 + br_len), Vector2(x0, y0), br_col, br_w)
+		draw_line(Vector2(x0, y0), Vector2(x0 + br_len, y0), br_col, br_w)
+		draw_line(Vector2(x1 - br_len, y0), Vector2(x1, y0), br_col, br_w)
+		draw_line(Vector2(x1, y0), Vector2(x1, y0 + br_len), br_col, br_w)
+		draw_line(Vector2(x0, y1 - br_len), Vector2(x0, y1), br_col, br_w)
+		draw_line(Vector2(x0, y1), Vector2(x0 + br_len, y1), br_col, br_w)
+		draw_line(Vector2(x1 - br_len, y1), Vector2(x1, y1), br_col, br_w)
+		draw_line(Vector2(x1, y1 - br_len), Vector2(x1, y1), br_col, br_w)
+
+
 var player: ListenerPlayer = null
 var minimap: LoSMinimapControl = null
 
@@ -48,6 +213,18 @@ var _font_mono_bold: Font
 
 # Root layers
 var _danger_overlay: ColorRect
+var _blood_vignette: TextureRect
+var _blood_vig_alpha: float = 0.0
+var _blood_pulse_t: float = 0.0
+var _chase_panic_overlay: Control
+var _chase_vignette: TextureRect
+var _chase_interference: ChaseInterferenceOverlay
+var _chase_intensity: float = 0.0
+var _chase_prox: float = 0.0
+var _chase_pulse_t: float = 0.0
+var _wakeup_overlay: Control
+var _wakeup_timer: float = 0.0
+var _wakeup_duration: float = 2.5
 var _jumpscare_overlay: Control
 var _jumpscare_flash_timer: float = 0.0
 var _jumpscare_flash_duration: float = 0.85
@@ -71,7 +248,6 @@ var _btn_nav_solo: Button
 var _btn_nav_coop: Button
 var _btn_nav_settings: Button
 var _btn_nav_how: Button
-var _btn_lang_quick: Button
 var _active_menu_tab: String = ""
 
 var _card_solo: PanelContainer
@@ -94,6 +270,8 @@ var _btn_copy_code: Button
 var _btn_join_code: Button
 var _btn_refresh_public: Button
 var _btn_launch_coop: Button
+var _coop_conn_status: String = ""
+var _coop_error_msg: String = ""
 
 var _card_settings: PanelContainer
 var _set_title_lbl: Label
@@ -130,17 +308,15 @@ var _obj_rows: Dictionary = {}
 var _obj_boxes: Dictionary = {}
 var _dossier_code_lbl: Label
 
+var _top_status_bar: PanelContainer
+var _top_bar_style: StyleBoxFlat
+var _acoustic_scope: AcousticScopeControl
 var _status_pill: PanelContainer
+var _status_pill_style: StyleBoxFlat
 var _stalker_alert_lbl: Label
 var _status_accent: Color = COL_RULE_STRONG
 var _status_is_urgent: bool = false
 
-var _mode_tag_lbl: Label
-var _vitals_lbl: Label
-var _battery_lbl: Label
-var _battery_hint_lbl: Label
-var _battery_meter: Control
-var _battery_val: float = 1.0
 var _breath_bar: ProgressBar
 
 var _reticle_dot: ColorRect
@@ -150,7 +326,6 @@ var _reticle_target_gap: float = 6.0
 var _reticle_active: bool = false
 
 var _prompt_box: PanelContainer
-var _prompt_key_lbl: Label
 var _prompt_icon: TextureRect
 var _prompt_lbl: Label
 
@@ -160,7 +335,6 @@ var _held_item_lbl: Label
 var _slot_btns: Array[Button] = []
 var _slot_icons: Array[TextureRect] = []
 var _slot_nums: Array[Label] = []
-var _legend_lbl: Label
 
 # Field Orientation Tutorial Card
 var _tut_card: PanelContainer
@@ -172,16 +346,21 @@ var _tut_skip_btn: Button
 var _tut_active: bool = false
 var _tut_step: int = 0
 
-# Touch Controls
+# Mobile Touch Controls
 var _is_touch_device: bool = false
+var _touch_controls_visible: bool = false
 var _joy_base: Panel
 var _joy_knob: Panel
-var _btn_sprint: Button
-var _btn_interact: Button
+var _joy_sprinting: bool = false
 var _btn_breath: Button
 var _btn_flashlight: Button
 var _btn_crouch: Button
 var _btn_drop: Button
+
+# Double-Tap Ripple Indicator
+var _tap_ripple_ctrl: Control
+var _tap_ripple_pos: Vector2 = Vector2.ZERO
+var _tap_ripple_timer: float = 0.0
 
 # Safe Keypad Modal
 var _safe_title_lbl: Label
@@ -204,6 +383,11 @@ var _btn_end_menu: Button
 var _joy_touch_idx: int = -1
 var _joy_center: Vector2 = Vector2.ZERO
 var _look_touch_idx: int = -1
+var _look_touch_start_pos: Vector2 = Vector2.ZERO
+var _look_touch_start_time: float = 0.0
+var _look_touch_moved: float = 0.0
+var _last_tap_time: float = -10.0
+var _last_tap_pos: Vector2 = Vector2.ZERO
 var _toast_timer: float = 0.0
 var _danger_pulse: float = 0.0
 var _status_pulse_t: float = 0.0
@@ -214,12 +398,20 @@ func _ready() -> void:
 	_load_fonts_and_build_theme()
 	_build_all_ui()
 	Loc.language_changed.connect(func(_l: String): refresh_texts())
-	NetRelay.room_joined.connect(func(_c: String, _h: bool): _refresh_coop_ui())
+	NetRelay.room_joined.connect(func(_c: String, _h: bool):
+		_coop_error_msg = ""
+		_coop_conn_status = "connected"
+		_refresh_coop_ui()
+	)
 	NetRelay.room_left.connect(func(_r: String): _refresh_coop_ui())
 	NetRelay.peer_updated.connect(func(_id: String, _s: Dictionary): _refresh_coop_ui())
 	NetRelay.peer_removed.connect(func(_id: String): _refresh_coop_ui())
 	NetRelay.host_migrated.connect(func(_id: String, _n: String): _refresh_coop_ui())
 	NetRelay.open_lobbies_received.connect(_on_open_lobbies)
+	if NetRelay.has_signal("relay_error"):
+		NetRelay.connect("relay_error", _on_relay_error)
+	if NetRelay.has_signal("connection_status_changed"):
+		NetRelay.connect("connection_status_changed", _on_relay_connection_status)
 	refresh_texts()
 
 
@@ -281,12 +473,12 @@ func _load_fonts_and_build_theme() -> void:
 
 	_theme = Theme.new()
 	_theme.default_font = _font_sans
-	_theme.default_font_size = 15
+	_theme.default_font_size = 16
 
 	# LineEdit styling (recessed ink input + sodium focus/caret)
-	var le_norm := _make_box(COL_INK, COL_RULE_STRONG, 2, 10, 8, 1)
-	var le_focus := _make_box(COL_INK, COL_SODIUM, 2, 10, 8, 1)
-	var le_ro := _make_box(COL_PANEL, COL_RULE, 2, 10, 8, 1)
+	var le_norm := _make_box(COL_INK, COL_RULE_STRONG, 2, 12, 9, 1)
+	var le_focus := _make_box(COL_INK, COL_SODIUM, 2, 12, 9, 1)
+	var le_ro := _make_box(COL_PANEL, COL_RULE, 2, 12, 9, 1)
 	_theme.set_stylebox("normal", "LineEdit", le_norm)
 	_theme.set_stylebox("focus", "LineEdit", le_focus)
 	_theme.set_stylebox("read_only", "LineEdit", le_ro)
@@ -295,26 +487,26 @@ func _load_fonts_and_build_theme() -> void:
 	_theme.set_color("caret_color", "LineEdit", COL_SODIUM)
 	_theme.set_color("selection_color", "LineEdit", Color(COL_SODIUM, 0.30))
 	_theme.set_font("font", "LineEdit", _font_sans)
-	_theme.set_font_size("font_size", "LineEdit", 14)
+	_theme.set_font_size("font_size", "LineEdit", 16)
 
 	# HSlider styling (Soviet hardware fader rail + square metal thumb)
 	var sl_bg := _make_box(COL_INK, COL_RULE_STRONG, 1, 0, 0, 1)
-	sl_bg.content_margin_top = 4
-	sl_bg.content_margin_bottom = 4
+	sl_bg.content_margin_top = 5
+	sl_bg.content_margin_bottom = 5
 	var sl_hi := _make_box(Color(COL_SODIUM, 0.42), COL_SODIUM, 1, 0, 0, 0)
-	sl_hi.content_margin_top = 4
-	sl_hi.content_margin_bottom = 4
+	sl_hi.content_margin_top = 5
+	sl_hi.content_margin_bottom = 5
 	var sl_area := _make_box(Color(COL_PAPER_DIM, 0.25), Color.TRANSPARENT, 1, 0, 0, 0)
-	sl_area.content_margin_top = 4
-	sl_area.content_margin_bottom = 4
+	sl_area.content_margin_top = 5
+	sl_area.content_margin_bottom = 5
 	_theme.set_stylebox("slider", "HSlider", sl_bg)
 	_theme.set_stylebox("grabber_area", "HSlider", sl_area)
 	_theme.set_stylebox("grabber_area_highlight", "HSlider", sl_hi)
-	_theme.set_icon("grabber", "HSlider", _make_slider_grabber_tex(COL_PAPER, Vector2i(10, 18)))
-	_theme.set_icon("grabber_highlight", "HSlider", _make_slider_grabber_tex(COL_SODIUM, Vector2i(12, 20)))
+	_theme.set_icon("grabber", "HSlider", _make_slider_grabber_tex(COL_PAPER, Vector2i(14, 22)))
+	_theme.set_icon("grabber_highlight", "HSlider", _make_slider_grabber_tex(COL_SODIUM, Vector2i(16, 24)))
 
 	# Scrollbar styling
-	var sb_track := _make_box(COL_INK, COL_RULE, 0, 2, 2, 1)
+	var sb_track := _make_box(COL_INK, COL_RULE, 0, 3, 3, 1)
 	var sb_grab := _make_box(COL_PAPER_MUTE, Color.TRANSPARENT, 1, 0, 0, 0)
 	var sb_grab_hi := _make_box(COL_SODIUM, Color.TRANSPARENT, 1, 0, 0, 0)
 	_theme.set_stylebox("scroll", "VScrollBar", sb_track)
@@ -356,7 +548,7 @@ func _anchor_box(c: Control, ax0: float, ay0: float, ax1: float, ay1: float, ox0
 	c.offset_bottom = oy1
 
 
-func _make_box(bg: Color, border: Color, radius: int = 2, pad_x: int = 14, pad_y: int = 10, border_w: int = 1) -> StyleBoxFlat:
+func _make_box(bg: Color, border: Color, radius: int = 2, pad_x: int = 16, pad_y: int = 11, border_w: int = 1) -> StyleBoxFlat:
 	var s := StyleBoxFlat.new()
 	s.bg_color = bg
 	s.border_color = border
@@ -407,13 +599,13 @@ func _on_draw_corner_ticks(ctrl: Control, len_px: float, inset: float) -> void:
 
 
 func _style_button(btn: Button, primary_cta: bool = false, selected: bool = false) -> void:
-	var focus_box := _make_box(Color.TRANSPARENT, COL_SODIUM, 2, 14, 9, 1)
+	var focus_box := _make_box(Color.TRANSPARENT, COL_SODIUM, 2, 16, 11, 1)
 	btn.add_theme_stylebox_override("focus", focus_box)
 	if primary_cta:
-		var cta_norm := _make_box(COL_SODIUM, COL_SODIUM, 2, 16, 10, 1)
-		var cta_hov := _make_box(Color(0.945, 0.698, 0.298, 1.0), Color(0.945, 0.698, 0.298, 1.0), 2, 16, 10, 1)
-		var cta_prs := _make_box(Color(0.760, 0.520, 0.165, 1.0), COL_SODIUM, 2, 16, 10, 1)
-		var cta_dis := _make_box(COL_PANEL, COL_RULE, 2, 16, 10, 1)
+		var cta_norm := _make_box(COL_SODIUM, COL_SODIUM, 2, 18, 12, 1)
+		var cta_hov := _make_box(Color(0.945, 0.698, 0.298, 1.0), Color(0.945, 0.698, 0.298, 1.0), 2, 18, 12, 1)
+		var cta_prs := _make_box(Color(0.760, 0.520, 0.165, 1.0), COL_SODIUM, 2, 18, 12, 1)
+		var cta_dis := _make_box(COL_PANEL, COL_RULE, 2, 18, 12, 1)
 		btn.add_theme_stylebox_override("normal", cta_norm)
 		btn.add_theme_stylebox_override("hover", cta_hov)
 		btn.add_theme_stylebox_override("pressed", cta_prs)
@@ -423,20 +615,20 @@ func _style_button(btn: Button, primary_cta: bool = false, selected: bool = fals
 		btn.add_theme_color_override("font_pressed_color", Color(0.039, 0.047, 0.043, 1.0))
 		btn.add_theme_color_override("font_disabled_color", Color(0.51, 0.49, 0.45, 1.0))
 		btn.add_theme_font_override("font", _font_sans_bold)
-		btn.add_theme_font_size_override("font_size", 15)
+		btn.add_theme_font_size_override("font_size", 17)
 	else:
 		var bg := COL_PANEL_HI if selected else COL_PANEL
 		var brd := Color(COL_SODIUM, 0.85) if selected else COL_RULE_STRONG
-		btn.add_theme_stylebox_override("normal", _make_box(bg, brd, 2, 14, 9, 1))
-		btn.add_theme_stylebox_override("hover", _make_box(COL_PANEL_HI, Color(COL_PAPER, 0.42), 2, 14, 9, 1))
-		btn.add_theme_stylebox_override("pressed", _make_box(Color(0.145, 0.175, 0.160, 0.98), COL_SODIUM, 2, 14, 9, 1))
-		btn.add_theme_stylebox_override("disabled", _make_box(COL_INK, COL_RULE, 2, 14, 9, 1))
+		btn.add_theme_stylebox_override("normal", _make_box(bg, brd, 2, 16, 11, 1))
+		btn.add_theme_stylebox_override("hover", _make_box(COL_PANEL_HI, Color(COL_PAPER, 0.42), 2, 16, 11, 1))
+		btn.add_theme_stylebox_override("pressed", _make_box(Color(0.145, 0.175, 0.160, 0.98), COL_SODIUM, 2, 16, 11, 1))
+		btn.add_theme_stylebox_override("disabled", _make_box(COL_INK, COL_RULE, 2, 16, 11, 1))
 		btn.add_theme_color_override("font_color", COL_SODIUM if selected else COL_PAPER)
 		btn.add_theme_color_override("font_hover_color", COL_PAPER)
 		btn.add_theme_color_override("font_pressed_color", COL_SODIUM)
 		btn.add_theme_color_override("font_disabled_color", COL_PAPER_MUTE)
 		btn.add_theme_font_override("font", _font_sans_bold if selected else _font_sans)
-		btn.add_theme_font_size_override("font_size", 15)
+		btn.add_theme_font_size_override("font_size", 17)
 
 
 func _style_nav_switch(btn: Button, active: bool) -> void:
@@ -449,7 +641,7 @@ func _style_nav_switch(btn: Button, active: bool) -> void:
 			var sz := btn.size
 			if sz.x < 24.0:
 				return
-			var box_r := Rect2(sz.x - 18.0, sz.y * 0.5 - 4.0, 8.0, 8.0)
+			var box_r := Rect2(sz.x - 20.0, sz.y * 0.5 - 4.5, 9.0, 9.0)
 			if is_on:
 				btn.draw_rect(box_r, COL_SODIUM, true)
 			else:
@@ -460,19 +652,19 @@ func _style_nav_switch(btn: Button, active: bool) -> void:
 
 func _make_drawer_header(parent: VBoxContainer, on_close: Callable) -> Label:
 	var row := HBoxContainer.new()
-	row.add_theme_constant_override("separation", 8)
+	row.add_theme_constant_override("separation", 10)
 	parent.add_child(row)
 
 	var title_lbl := Label.new()
 	title_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	title_lbl.uppercase = true
 	title_lbl.add_theme_font_override("font", _font_display)
-	title_lbl.add_theme_font_size_override("font_size", 22)
+	title_lbl.add_theme_font_size_override("font_size", 26)
 	title_lbl.add_theme_color_override("font_color", COL_PAPER)
 	row.add_child(title_lbl)
 
 	var close_btn := Button.new()
-	close_btn.custom_minimum_size = Vector2(30, 30)
+	close_btn.custom_minimum_size = Vector2(36, 36)
 	close_btn.text = ""
 	close_btn.add_theme_stylebox_override("normal", _make_box(COL_INK, COL_RULE_STRONG, 2, 0, 0, 1))
 	close_btn.add_theme_stylebox_override("hover", _make_box(COL_PANEL_HI, COL_SODIUM, 2, 0, 0, 1))
@@ -481,8 +673,8 @@ func _make_drawer_header(parent: VBoxContainer, on_close: Callable) -> Label:
 	close_btn.draw.connect(func():
 		var c := close_btn.size * 0.5
 		var col := COL_SODIUM if close_btn.is_hovered() else COL_PAPER_DIM
-		close_btn.draw_line(c + Vector2(-4.5, -4.5), c + Vector2(4.5, 4.5), col, 1.5, true)
-		close_btn.draw_line(c + Vector2(4.5, -4.5), c + Vector2(-4.5, 4.5), col, 1.5, true)
+		close_btn.draw_line(c + Vector2(-5.5, -5.5), c + Vector2(5.5, 5.5), col, 1.6, true)
+		close_btn.draw_line(c + Vector2(5.5, -5.5), c + Vector2(-5.5, 5.5), col, 1.6, true)
 	)
 	close_btn.pressed.connect(on_close)
 	row.add_child(close_btn)
@@ -522,6 +714,49 @@ func _tween_pop_in(ctrl: Control, start_scale: float = 0.97, start_alpha: float 
 	ctrl.set_meta("_pop_tween", tw)
 
 
+func _make_blood_vignette_tex() -> ImageTexture:
+	var w := 256
+	var h := 144
+	var img := Image.create(w, h, false, Image.FORMAT_RGBA8)
+	for y in range(h):
+		var ny := (float(y) / float(h - 1)) * 2.0 - 1.0
+		for x in range(w):
+			var nx := (float(x) / float(w - 1)) * 2.0 - 1.0
+			var ell := sqrt(nx * nx * 1.12 + ny * ny * 0.94)
+			var box_d := maxf(absf(nx), absf(ny))
+			var edge := lerpf(ell, box_d, 0.45)
+			# Keep center 52% clear; rich organic blood mottling along screen sides & corners
+			var org := 0.5 + 0.5 * (sin(nx * 11.3 + ny * 7.1) * 0.55 + cos(nx * 23.7 - ny * 17.9) * 0.45)
+			var vig := clampf((edge - 0.52) / 0.48, 0.0, 1.0)
+			var raw_a := clampf(pow(vig, 1.45) * (0.62 + 0.46 * org), 0.0, 0.96)
+			var r_col := lerpf(0.28, 0.72, clampf(org * 0.8 + vig * 0.25, 0.0, 1.0))
+			var g_col := lerpf(0.02, 0.09, org * (1.0 - vig * 0.4))
+			var b_col := 0.03
+			img.set_pixel(x, y, Color(r_col, g_col, b_col, raw_a))
+	return ImageTexture.create_from_image(img)
+
+
+func _make_chase_vignette_tex() -> ImageTexture:
+	var w := 256
+	var h := 144
+	var img := Image.create(w, h, false, Image.FORMAT_RGBA8)
+	for y in range(h):
+		var ny := (float(y) / float(h - 1)) * 2.0 - 1.0
+		for x in range(w):
+			var nx := (float(x) / float(w - 1)) * 2.0 - 1.0
+			var ell := sqrt(nx * nx * 1.18 + ny * ny * 1.04)
+			var box_d := maxf(absf(nx), absf(ny))
+			var edge := lerpf(ell, box_d, 0.35)
+			var vig := clampf((edge - 0.38) / 0.62, 0.0, 1.0)
+			var tunnel_a := clampf(pow(vig, 1.35) * 0.94, 0.0, 0.96)
+			var rim := clampf((edge - 0.72) / 0.28, 0.0, 1.0)
+			var r_col := lerpf(0.56, 0.06, rim)
+			var g_col := lerpf(0.06, 0.015, rim)
+			var b_col := lerpf(0.05, 0.02, rim)
+			img.set_pixel(x, y, Color(r_col, g_col, b_col, tunnel_a))
+	return ImageTexture.create_from_image(img)
+
+
 func _build_all_ui() -> void:
 	_danger_overlay = ColorRect.new()
 	_danger_overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -529,8 +764,43 @@ func _build_all_ui() -> void:
 	_danger_overlay.color = Color(0.55, 0.06, 0.05, 0.0)
 	add_child(_danger_overlay)
 
+	_blood_vignette = TextureRect.new()
+	_blood_vignette.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_blood_vignette.texture = _make_blood_vignette_tex()
+	_blood_vignette.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	_blood_vignette.stretch_mode = TextureRect.STRETCH_SCALE
+	_blood_vignette.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_blood_vignette.modulate.a = 0.0
+	_blood_vignette.visible = false
+	add_child(_blood_vignette)
+
+	_chase_panic_overlay = Control.new()
+	_chase_panic_overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_chase_panic_overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_chase_panic_overlay.visible = false
+	add_child(_chase_panic_overlay)
+
+	_chase_vignette = TextureRect.new()
+	_chase_vignette.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_chase_vignette.texture = _make_chase_vignette_tex()
+	_chase_vignette.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	_chase_vignette.stretch_mode = TextureRect.STRETCH_SCALE
+	_chase_vignette.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_chase_vignette.modulate.a = 0.0
+	_chase_panic_overlay.add_child(_chase_vignette)
+
+	_chase_interference = ChaseInterferenceOverlay.new()
+	_chase_panic_overlay.add_child(_chase_interference)
+
 	_build_main_menu()
 	_build_gameplay_hud()
+
+	_wakeup_overlay = Control.new()
+	_wakeup_overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_wakeup_overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_wakeup_overlay.visible = false
+	_wakeup_overlay.draw.connect(_draw_wakeup_overlay)
+	add_child(_wakeup_overlay)
 
 	_jumpscare_overlay = Control.new()
 	_jumpscare_overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -557,9 +827,9 @@ func _build_all_ui() -> void:
 	add_child(_black_curtain)
 
 	var cv := VBoxContainer.new()
-	_anchor_box(cv, 0.5, 0.5, 0.5, 0.5, -280, -84, 280, 84)
+	_anchor_box(cv, 0.5, 0.5, 0.5, 0.5, -300, -90, 300, 90)
 	cv.alignment = BoxContainer.ALIGNMENT_CENTER
-	cv.add_theme_constant_override("separation", 12)
+	cv.add_theme_constant_override("separation", 14)
 	_black_curtain.add_child(cv)
 
 	_curtain_title = Label.new()
@@ -570,18 +840,9 @@ func _build_all_ui() -> void:
 	_curtain_title.add_theme_color_override("font_color", COL_SIGNAL)
 	cv.add_child(_curtain_title)
 
-	var curtain_rule := ColorRect.new()
-	curtain_rule.custom_minimum_size = Vector2(220, 1)
-	curtain_rule.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
-	curtain_rule.color = Color(COL_SODIUM, 0.55)
-	cv.add_child(curtain_rule)
-
 	_curtain_sub = Label.new()
-	_curtain_sub.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_curtain_sub.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	_curtain_sub.add_theme_font_override("font", _font_sans)
-	_curtain_sub.add_theme_font_size_override("font_size", 15)
-	_curtain_sub.add_theme_color_override("font_color", COL_PAPER_DIM)
+	_curtain_sub.visible = false
+	_curtain_sub.text = ""
 	cv.add_child(_curtain_sub)
 
 
@@ -604,76 +865,76 @@ func _build_main_menu() -> void:
 	grad_tex.fill_to = Vector2(1.0, 0.5)
 
 	var left_shade := TextureRect.new()
-	_anchor_box(left_shade, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 540.0, 0.0)
+	_anchor_box(left_shade, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 560.0, 0.0)
 	left_shade.texture = grad_tex
 	left_shade.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	left_shade.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_menu_root.add_child(left_shade)
 
 	var hair_div := ColorRect.new()
-	_anchor_box(hair_div, 0.0, 0.0, 0.0, 1.0, 368.0, 28.0, 369.0, -28.0)
+	_anchor_box(hair_div, 0.0, 0.0, 0.0, 1.0, 386.0, 28.0, 387.0, -28.0)
 	hair_div.color = COL_RULE
 	hair_div.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_menu_root.add_child(hair_div)
 
 	var left_col := VBoxContainer.new()
-	_anchor_box(left_col, 0.0, 0.0, 0.0, 1.0, 32.0, 40.0, 348.0, -32.0)
-	left_col.add_theme_constant_override("separation", 10)
+	_anchor_box(left_col, 0.0, 0.0, 0.0, 1.0, 28.0, 34.0, 368.0, -28.0)
+	left_col.add_theme_constant_override("separation", 11)
 	_menu_root.add_child(left_col)
 
 	_menu_title_lbl = Label.new()
 	_menu_title_lbl.uppercase = true
 	_menu_title_lbl.add_theme_font_override("font", _font_display)
-	_menu_title_lbl.add_theme_font_size_override("font_size", 36)
+	_menu_title_lbl.add_theme_font_size_override("font_size", 40)
 	_menu_title_lbl.add_theme_color_override("font_color", COL_PAPER)
 	_menu_title_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	left_col.add_child(_menu_title_lbl)
 
 	_menu_sub_lbl = Label.new()
 	_menu_sub_lbl.add_theme_font_override("font", _font_sans)
-	_menu_sub_lbl.add_theme_font_size_override("font_size", 14)
+	_menu_sub_lbl.add_theme_font_size_override("font_size", 16)
 	_menu_sub_lbl.add_theme_color_override("font_color", COL_PAPER_DIM)
 	_menu_sub_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	left_col.add_child(_menu_sub_lbl)
 
 	_record_plate = PanelContainer.new()
-	_record_plate.add_theme_stylebox_override("panel", _make_box(COL_PANEL, COL_RULE_STRONG, 2, 12, 8, 1))
-	_attach_corner_ticks(_record_plate, Color(COL_SODIUM, 0.65), 6.0, 1.0)
+	_record_plate.add_theme_stylebox_override("panel", _make_box(COL_PANEL, COL_RULE_STRONG, 2, 14, 9, 1))
+	_attach_corner_ticks(_record_plate, Color(COL_SODIUM, 0.65), 7.0, 1.0)
 	left_col.add_child(_record_plate)
 
 	_record_lbl = Label.new()
 	_record_lbl.add_theme_font_override("font", _font_mono_bold)
-	_record_lbl.add_theme_font_size_override("font_size", 12)
+	_record_lbl.add_theme_font_size_override("font_size", 14)
 	_record_lbl.add_theme_color_override("font_color", COL_SODIUM)
 	_record_plate.add_child(_record_lbl)
 
 	var spacer := Control.new()
-	spacer.custom_minimum_size = Vector2(0, 14)
+	spacer.custom_minimum_size = Vector2(0, 12)
 	left_col.add_child(spacer)
 
 	_btn_nav_solo = Button.new()
-	_btn_nav_solo.custom_minimum_size = Vector2(0, 46)
+	_btn_nav_solo.custom_minimum_size = Vector2(0, 52)
 	_btn_nav_solo.alignment = HORIZONTAL_ALIGNMENT_LEFT
 	_style_nav_switch(_btn_nav_solo, false)
 	_btn_nav_solo.pressed.connect(func(): _switch_menu_card("solo"))
 	left_col.add_child(_btn_nav_solo)
 
 	_btn_nav_coop = Button.new()
-	_btn_nav_coop.custom_minimum_size = Vector2(0, 46)
+	_btn_nav_coop.custom_minimum_size = Vector2(0, 52)
 	_btn_nav_coop.alignment = HORIZONTAL_ALIGNMENT_LEFT
 	_style_nav_switch(_btn_nav_coop, false)
 	_btn_nav_coop.pressed.connect(func(): _switch_menu_card("coop"))
 	left_col.add_child(_btn_nav_coop)
 
 	_btn_nav_settings = Button.new()
-	_btn_nav_settings.custom_minimum_size = Vector2(0, 46)
+	_btn_nav_settings.custom_minimum_size = Vector2(0, 52)
 	_btn_nav_settings.alignment = HORIZONTAL_ALIGNMENT_LEFT
 	_style_nav_switch(_btn_nav_settings, false)
 	_btn_nav_settings.pressed.connect(func(): _switch_menu_card("settings"))
 	left_col.add_child(_btn_nav_settings)
 
 	_btn_nav_how = Button.new()
-	_btn_nav_how.custom_minimum_size = Vector2(0, 46)
+	_btn_nav_how.custom_minimum_size = Vector2(0, 52)
 	_btn_nav_how.alignment = HORIZONTAL_ALIGNMENT_LEFT
 	_style_nav_switch(_btn_nav_how, false)
 	_btn_nav_how.pressed.connect(func(): _switch_menu_card("how"))
@@ -687,33 +948,21 @@ func _build_main_menu() -> void:
 	foot_row.add_theme_constant_override("separation", 10)
 	left_col.add_child(foot_row)
 
-	_btn_lang_quick = Button.new()
-	_btn_lang_quick.custom_minimum_size = Vector2(104, 38)
-	_style_button(_btn_lang_quick, false, false)
-	_btn_lang_quick.add_theme_font_override("font", _font_mono_bold)
-	_btn_lang_quick.add_theme_font_size_override("font_size", 13)
-	_btn_lang_quick.pressed.connect(func():
-		SynthAudio.play_2d("ui_click", -6.0)
-		Loc.toggle_language()
-		SaveState.save_profile()
-	)
-	foot_row.add_child(_btn_lang_quick)
-
 	var inst_id := Label.new()
 	inst_id.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	inst_id.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	inst_id.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	inst_id.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	inst_id.text = "НИИ-07 · КТ-4"
+	inst_id.text = "НИИ-07 · КТ-4 · v4.1"
 	inst_id.add_theme_font_override("font", _font_mono)
-	inst_id.add_theme_font_size_override("font_size", 12)
+	inst_id.add_theme_font_size_override("font_size", 13)
 	inst_id.add_theme_color_override("font_color", COL_PAPER_MUTE)
 	foot_row.add_child(inst_id)
 
-	var drawer_style := _make_box(COL_PANEL, COL_RULE_STRONG, 3, 20, 18, 1)
+	var drawer_style := _make_box(COL_PANEL, COL_RULE_STRONG, 3, 22, 18, 1)
 
-	# A) SOLO CLEARANCE DRAWER (kept within x = 384..824 so Listener-07 stays unobstructed on the right!)
+	# A) SOLO CLEARANCE DRAWER (kept within x = 402..850 so Listener-07 stays unobstructed on the right!)
 	_card_solo = PanelContainer.new()
-	_anchor_box(_card_solo, 0.0, 0.0, 0.0, 0.0, 384.0, 56.0, 824.0, 444.0)
+	_anchor_box(_card_solo, 0.0, 0.0, 0.0, 0.0, 402.0, 46.0, 850.0, 476.0)
 	_card_solo.add_theme_stylebox_override("panel", drawer_style)
 	_attach_corner_ticks(_card_solo, COL_SODIUM, 10.0, 1.0)
 	_card_solo.visible = false
@@ -727,11 +976,11 @@ func _build_main_menu() -> void:
 
 	for d_idx in range(3):
 		var db := Button.new()
-		db.custom_minimum_size = Vector2(0, 56)
+		db.custom_minimum_size = Vector2(0, 62)
 		db.alignment = HORIZONTAL_ALIGNMENT_LEFT
 		db.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		_style_button(db, false, d_idx == SaveState.difficulty)
-		db.add_theme_font_size_override("font_size", 14)
+		db.add_theme_font_size_override("font_size", 15)
 		var captured := d_idx
 		db.draw.connect(func():
 			var sel := (captured == SaveState.difficulty)
@@ -755,10 +1004,10 @@ func _build_main_menu() -> void:
 	sv.add_child(sp_s)
 
 	_btn_begin_solo = Button.new()
-	_btn_begin_solo.custom_minimum_size = Vector2(0, 48)
+	_btn_begin_solo.custom_minimum_size = Vector2(0, 52)
 	_style_button(_btn_begin_solo, true, false)
 	_btn_begin_solo.add_theme_font_override("font", _font_display_md)
-	_btn_begin_solo.add_theme_font_size_override("font_size", 18)
+	_btn_begin_solo.add_theme_font_size_override("font_size", 20)
 	_btn_begin_solo.pressed.connect(func():
 		SynthAudio.play_2d("ui_click", -2.0)
 		start_solo_requested.emit(SaveState.difficulty)
@@ -767,7 +1016,7 @@ func _build_main_menu() -> void:
 
 	# B) CO-OP RELAY UPLINK CONSOLE
 	_card_coop = PanelContainer.new()
-	_anchor_box(_card_coop, 0.0, 0.0, 0.0, 0.0, 384.0, 42.0, 856.0, 620.0)
+	_anchor_box(_card_coop, 0.0, 0.0, 0.0, 0.0, 402.0, 30.0, 902.0, 668.0)
 	_card_coop.add_theme_stylebox_override("panel", drawer_style)
 	_attach_corner_ticks(_card_coop, COL_PHOSPHOR, 10.0, 1.0)
 	_card_coop.visible = false
@@ -790,14 +1039,14 @@ func _build_main_menu() -> void:
 
 	_lbl_callsign = Label.new()
 	_lbl_callsign.add_theme_font_override("font", _font_mono)
-	_lbl_callsign.add_theme_font_size_override("font_size", 12)
+	_lbl_callsign.add_theme_font_size_override("font_size", 13)
 	_lbl_callsign.add_theme_color_override("font_color", COL_PAPER_DIM)
 	col_name.add_child(_lbl_callsign)
 
 	_name_input = LineEdit.new()
 	_name_input.text = SaveState.callsign
 	_name_input.placeholder_text = "SURVIVOR"
-	_name_input.custom_minimum_size = Vector2(0, 40)
+	_name_input.custom_minimum_size = Vector2(0, 44)
 	_name_input.text_changed.connect(func(nt: String):
 		SaveState.callsign = nt.strip_edges().left(14) if not nt.strip_edges().is_empty() else "SURVIVOR"
 		SaveState.save_profile()
@@ -811,46 +1060,54 @@ func _build_main_menu() -> void:
 
 	_lbl_relay = Label.new()
 	_lbl_relay.add_theme_font_override("font", _font_mono)
-	_lbl_relay.add_theme_font_size_override("font_size", 12)
+	_lbl_relay.add_theme_font_size_override("font_size", 13)
 	_lbl_relay.add_theme_color_override("font_color", COL_PAPER_DIM)
 	col_relay.add_child(_lbl_relay)
 
 	_relay_input = LineEdit.new()
 	_relay_input.text = SaveState.relay_url
 	_relay_input.placeholder_text = "ws://127.0.0.1:8787"
-	_relay_input.custom_minimum_size = Vector2(0, 40)
+	_relay_input.custom_minimum_size = Vector2(0, 44)
 	_relay_input.add_theme_font_override("font", _font_mono)
-	_relay_input.add_theme_font_size_override("font_size", 13)
+	_relay_input.add_theme_font_size_override("font_size", 14)
 	_relay_input.text_changed.connect(func(nt: String):
-		if nt.begins_with("ws://") or nt.begins_with("wss://"):
-			SaveState.relay_url = nt.strip_edges()
-			SaveState.save_profile()
+		_apply_normalized_relay_url(nt, false)
+	)
+	_relay_input.text_submitted.connect(func(nt: String):
+		_apply_normalized_relay_url(nt, true)
+	)
+	_relay_input.focus_exited.connect(func():
+		_apply_normalized_relay_url(_relay_input.text, true)
 	)
 	col_relay.add_child(_relay_input)
 
 	_relay_hint_lbl = Label.new()
 	_relay_hint_lbl.add_theme_font_override("font", _font_sans)
-	_relay_hint_lbl.add_theme_font_size_override("font_size", 12)
+	_relay_hint_lbl.add_theme_font_size_override("font_size", 13)
 	_relay_hint_lbl.add_theme_color_override("font_color", COL_PAPER_DIM)
 	_relay_hint_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	cv.add_child(_relay_hint_lbl)
 
 	var row_create := HBoxContainer.new()
-	row_create.add_theme_constant_override("separation", 8)
+	row_create.add_theme_constant_override("separation", 10)
 	cv.add_child(row_create)
 
 	_btn_create_room = Button.new()
-	_btn_create_room.custom_minimum_size = Vector2(0, 44)
+	_btn_create_room.custom_minimum_size = Vector2(0, 48)
 	_btn_create_room.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_style_button(_btn_create_room, true, false)
 	_btn_create_room.pressed.connect(func():
 		SynthAudio.play_2d("ui_click", -5.0)
+		_apply_normalized_relay_url(_relay_input.text, true)
+		_coop_error_msg = ""
+		_coop_conn_status = "connecting"
+		_refresh_coop_ui()
 		NetRelay.create_room(true, 1)
 	)
 	row_create.add_child(_btn_create_room)
 
 	_btn_copy_code = Button.new()
-	_btn_copy_code.custom_minimum_size = Vector2(0, 44)
+	_btn_copy_code.custom_minimum_size = Vector2(0, 48)
 	_btn_copy_code.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_style_button(_btn_copy_code, false, false)
 	_btn_copy_code.pressed.connect(func():
@@ -860,41 +1117,49 @@ func _build_main_menu() -> void:
 	row_create.add_child(_btn_copy_code)
 
 	var row_join := HBoxContainer.new()
-	row_join.add_theme_constant_override("separation", 8)
+	row_join.add_theme_constant_override("separation", 10)
 	cv.add_child(row_join)
 
 	_code_input = LineEdit.new()
 	_code_input.max_length = 6
 	_code_input.placeholder_text = "ABCD"
 	_code_input.alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_code_input.custom_minimum_size = Vector2(96, 44)
+	_code_input.custom_minimum_size = Vector2(104, 48)
 	_code_input.add_theme_font_override("font", _font_mono_bold)
-	_code_input.add_theme_font_size_override("font_size", 16)
+	_code_input.add_theme_font_size_override("font_size", 18)
 	row_join.add_child(_code_input)
 
 	_btn_join_code = Button.new()
-	_btn_join_code.custom_minimum_size = Vector2(0, 44)
+	_btn_join_code.custom_minimum_size = Vector2(0, 48)
 	_btn_join_code.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_style_button(_btn_join_code, false, false)
 	_btn_join_code.pressed.connect(func():
 		SynthAudio.play_2d("ui_click", -5.0)
+		_apply_normalized_relay_url(_relay_input.text, true)
+		_coop_error_msg = ""
+		_coop_conn_status = "connecting"
+		_refresh_coop_ui()
 		NetRelay.join_room(_code_input.text)
 	)
 	row_join.add_child(_btn_join_code)
 
 	_btn_refresh_public = Button.new()
-	_btn_refresh_public.custom_minimum_size = Vector2(0, 44)
+	_btn_refresh_public.custom_minimum_size = Vector2(0, 48)
 	_btn_refresh_public.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_style_button(_btn_refresh_public, false, false)
 	_btn_refresh_public.pressed.connect(func():
 		SynthAudio.play_2d("ui_click", -5.0)
+		_apply_normalized_relay_url(_relay_input.text, true)
+		_coop_error_msg = ""
+		_coop_conn_status = "connecting"
+		_refresh_coop_ui()
 		NetRelay.request_open_lobbies()
 	)
 	row_join.add_child(_btn_refresh_public)
 
 	_coop_status_lbl = Label.new()
 	_coop_status_lbl.add_theme_font_override("font", _font_mono)
-	_coop_status_lbl.add_theme_font_size_override("font_size", 13)
+	_coop_status_lbl.add_theme_font_size_override("font_size", 14)
 	_coop_status_lbl.add_theme_color_override("font_color", COL_SODIUM)
 	_coop_status_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	cv.add_child(_coop_status_lbl)
@@ -910,19 +1175,19 @@ func _build_main_menu() -> void:
 	rooms_scroll.add_child(_public_rooms_box)
 
 	_btn_launch_coop = Button.new()
-	_btn_launch_coop.custom_minimum_size = Vector2(0, 48)
+	_btn_launch_coop.custom_minimum_size = Vector2(0, 52)
 	_style_button(_btn_launch_coop, true, false)
 	_btn_launch_coop.add_theme_font_override("font", _font_display_md)
-	_btn_launch_coop.add_theme_font_size_override("font_size", 17)
+	_btn_launch_coop.add_theme_font_size_override("font_size", 19)
 	_btn_launch_coop.pressed.connect(func():
 		SynthAudio.play_2d("ui_click", -2.0)
 		start_coop_match_requested.emit(SaveState.difficulty)
 	)
 	cv.add_child(_btn_launch_coop)
 
-	# C) SETTINGS CONSOLE
+	# C) SETTINGS CONSOLE (Language Switch lives ONLY here)
 	_card_settings = PanelContainer.new()
-	_anchor_box(_card_settings, 0.0, 0.0, 0.0, 0.0, 388.0, 56.0, 884.0, 566.0)
+	_anchor_box(_card_settings, 0.0, 0.0, 0.0, 0.0, 402.0, 40.0, 916.0, 614.0)
 	_card_settings.add_theme_stylebox_override("panel", drawer_style)
 	_attach_corner_ticks(_card_settings, COL_SODIUM, 10.0, 1.0)
 	_card_settings.visible = false
@@ -938,17 +1203,17 @@ func _build_main_menu() -> void:
 	stv.add_child(sens_row)
 	_lbl_sens = Label.new()
 	_lbl_sens.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_lbl_sens.add_theme_font_size_override("font_size", 14)
+	_lbl_sens.add_theme_font_size_override("font_size", 16)
 	_lbl_sens.add_theme_color_override("font_color", COL_PAPER)
 	sens_row.add_child(_lbl_sens)
 	_val_sens_lbl = Label.new()
 	_val_sens_lbl.add_theme_font_override("font", _font_mono_bold)
-	_val_sens_lbl.add_theme_font_size_override("font_size", 14)
+	_val_sens_lbl.add_theme_font_size_override("font_size", 16)
 	_val_sens_lbl.add_theme_color_override("font_color", COL_SODIUM)
 	sens_row.add_child(_val_sens_lbl)
 
 	_slider_sens = HSlider.new()
-	_slider_sens.custom_minimum_size = Vector2(0, 24)
+	_slider_sens.custom_minimum_size = Vector2(0, 28)
 	_slider_sens.min_value = 0.3
 	_slider_sens.max_value = 2.5
 	_slider_sens.step = 0.05
@@ -964,17 +1229,17 @@ func _build_main_menu() -> void:
 	stv.add_child(vol_row)
 	_lbl_vol = Label.new()
 	_lbl_vol.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_lbl_vol.add_theme_font_size_override("font_size", 14)
+	_lbl_vol.add_theme_font_size_override("font_size", 16)
 	_lbl_vol.add_theme_color_override("font_color", COL_PAPER)
 	vol_row.add_child(_lbl_vol)
 	_val_vol_lbl = Label.new()
 	_val_vol_lbl.add_theme_font_override("font", _font_mono_bold)
-	_val_vol_lbl.add_theme_font_size_override("font_size", 14)
+	_val_vol_lbl.add_theme_font_size_override("font_size", 16)
 	_val_vol_lbl.add_theme_color_override("font_color", COL_SODIUM)
 	vol_row.add_child(_val_vol_lbl)
 
 	_slider_vol = HSlider.new()
-	_slider_vol.custom_minimum_size = Vector2(0, 24)
+	_slider_vol.custom_minimum_size = Vector2(0, 28)
 	_slider_vol.min_value = 0.05
 	_slider_vol.max_value = 1.2
 	_slider_vol.step = 0.05
@@ -987,9 +1252,10 @@ func _build_main_menu() -> void:
 	stv.add_child(_slider_vol)
 
 	_btn_mic_mode = Button.new()
-	_btn_mic_mode.custom_minimum_size = Vector2(0, 44)
+	_btn_mic_mode.custom_minimum_size = Vector2(0, 48)
 	_btn_mic_mode.alignment = HORIZONTAL_ALIGNMENT_LEFT
 	_style_button(_btn_mic_mode, false, false)
+	_btn_mic_mode.add_theme_font_size_override("font_size", 16)
 	_btn_mic_mode.pressed.connect(func():
 		SynthAudio.play_2d("ui_click", -5.0)
 		SaveState.mic_mode = (SaveState.mic_mode + 1) % 3
@@ -1005,11 +1271,11 @@ func _build_main_menu() -> void:
 	stv.add_child(toggle_grid)
 
 	_btn_gyro = Button.new()
-	_btn_gyro.custom_minimum_size = Vector2(0, 52)
+	_btn_gyro.custom_minimum_size = Vector2(0, 58)
 	_btn_gyro.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_btn_gyro.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_style_button(_btn_gyro, false, SaveState.gyro_enabled)
-	_btn_gyro.add_theme_font_size_override("font_size", 13)
+	_btn_gyro.add_theme_font_size_override("font_size", 15)
 	_btn_gyro.pressed.connect(func():
 		SynthAudio.play_2d("ui_click", -5.0)
 		SaveState.gyro_enabled = not SaveState.gyro_enabled
@@ -1019,11 +1285,11 @@ func _build_main_menu() -> void:
 	toggle_grid.add_child(_btn_gyro)
 
 	_btn_haptics = Button.new()
-	_btn_haptics.custom_minimum_size = Vector2(0, 52)
+	_btn_haptics.custom_minimum_size = Vector2(0, 58)
 	_btn_haptics.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_btn_haptics.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_style_button(_btn_haptics, false, SaveState.haptics_enabled)
-	_btn_haptics.add_theme_font_size_override("font_size", 13)
+	_btn_haptics.add_theme_font_size_override("font_size", 15)
 	_btn_haptics.pressed.connect(func():
 		SynthAudio.play_2d("ui_click", -5.0)
 		SaveState.haptics_enabled = not SaveState.haptics_enabled
@@ -1033,11 +1299,11 @@ func _build_main_menu() -> void:
 	toggle_grid.add_child(_btn_haptics)
 
 	_btn_reduce_motion = Button.new()
-	_btn_reduce_motion.custom_minimum_size = Vector2(0, 52)
+	_btn_reduce_motion.custom_minimum_size = Vector2(0, 58)
 	_btn_reduce_motion.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_btn_reduce_motion.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_style_button(_btn_reduce_motion, false, _get_reduce_motion())
-	_btn_reduce_motion.add_theme_font_size_override("font_size", 13)
+	_btn_reduce_motion.add_theme_font_size_override("font_size", 15)
 	_btn_reduce_motion.pressed.connect(func():
 		SynthAudio.play_2d("ui_click", -5.0)
 		_set_reduce_motion(not _get_reduce_motion())
@@ -1046,11 +1312,11 @@ func _build_main_menu() -> void:
 	toggle_grid.add_child(_btn_reduce_motion)
 
 	_btn_lang = Button.new()
-	_btn_lang.custom_minimum_size = Vector2(0, 52)
+	_btn_lang.custom_minimum_size = Vector2(0, 58)
 	_btn_lang.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_btn_lang.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_style_button(_btn_lang, false, false)
-	_btn_lang.add_theme_font_size_override("font_size", 13)
+	_btn_lang.add_theme_font_size_override("font_size", 15)
 	_btn_lang.pressed.connect(func():
 		SynthAudio.play_2d("ui_click", -5.0)
 		Loc.toggle_language()
@@ -1059,8 +1325,9 @@ func _build_main_menu() -> void:
 	toggle_grid.add_child(_btn_lang)
 
 	_btn_replay_tutorial = Button.new()
-	_btn_replay_tutorial.custom_minimum_size = Vector2(0, 44)
+	_btn_replay_tutorial.custom_minimum_size = Vector2(0, 48)
 	_style_button(_btn_replay_tutorial, false, not SaveState.tutorial_completed)
+	_btn_replay_tutorial.add_theme_font_size_override("font_size", 15)
 	_btn_replay_tutorial.pressed.connect(func():
 		SynthAudio.play_2d("ui_click", -5.0)
 		SaveState.tutorial_completed = false
@@ -1069,9 +1336,9 @@ func _build_main_menu() -> void:
 	)
 	stv.add_child(_btn_replay_tutorial)
 
-	# D) STRUCTURED FIELD MANUAL WITH CONTROL KEYCAPS
+	# D) STRUCTURED FIELD MANUAL (Mobile Touch + PC/Gamepad Controls + Survival Protocol)
 	_card_how = PanelContainer.new()
-	_anchor_box(_card_how, 0.0, 0.0, 0.0, 0.0, 388.0, 40.0, 916.0, 650.0)
+	_anchor_box(_card_how, 0.0, 0.0, 0.0, 0.0, 402.0, 32.0, 944.0, 676.0)
 	_card_how.add_theme_stylebox_override("panel", drawer_style)
 	_attach_corner_ticks(_card_how, COL_COLD, 10.0, 1.0)
 	_card_how.visible = false
@@ -1083,11 +1350,33 @@ func _build_main_menu() -> void:
 
 	_how_title_lbl = _make_drawer_header(hv, func(): _switch_menu_card(""))
 
+	var how_scroll := ScrollContainer.new()
+	how_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	hv.add_child(how_scroll)
+
+	var how_scroll_vb := VBoxContainer.new()
+	how_scroll_vb.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	how_scroll_vb.add_theme_constant_override("separation", 12)
+	how_scroll.add_child(how_scroll_vb)
+
+	_how_body_lbl = Label.new()
+	_how_body_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_how_body_lbl.add_theme_font_override("font", _font_sans)
+	_how_body_lbl.add_theme_font_size_override("font_size", 15)
+	_how_body_lbl.add_theme_color_override("font_color", COL_PAPER)
+	_how_body_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	how_scroll_vb.add_child(_how_body_lbl)
+
+	var sep_how := ColorRect.new()
+	sep_how.custom_minimum_size = Vector2(0, 1)
+	sep_how.color = COL_RULE
+	how_scroll_vb.add_child(sep_how)
+
 	_manual_keys_grid = GridContainer.new()
 	_manual_keys_grid.columns = 2
-	_manual_keys_grid.add_theme_constant_override("h_separation", 12)
-	_manual_keys_grid.add_theme_constant_override("v_separation", 6)
-	hv.add_child(_manual_keys_grid)
+	_manual_keys_grid.add_theme_constant_override("h_separation", 14)
+	_manual_keys_grid.add_theme_constant_override("v_separation", 7)
+	how_scroll_vb.add_child(_manual_keys_grid)
 
 	var key_specs := [
 		["WASD", "KEY_MOVE"],
@@ -1097,7 +1386,7 @@ func _build_main_menu() -> void:
 		["R", "KEY_CELL"],
 		["C", "KEY_CROUCH"],
 		["SPACE", "KEY_BREATH"],
-		["G", "KEY_THROW"],
+		["G / Q", "KEY_THROW"],
 		["RMB", "KEY_USE"],
 		["TAB", "KEY_DOSSIER"]
 	]
@@ -1108,8 +1397,8 @@ func _build_main_menu() -> void:
 		_manual_keys_grid.add_child(row)
 
 		var cap_panel := PanelContainer.new()
-		cap_panel.custom_minimum_size = Vector2(74, 24)
-		cap_panel.add_theme_stylebox_override("panel", _make_box(COL_INK, COL_RULE_STRONG, 2, 6, 2, 1))
+		cap_panel.custom_minimum_size = Vector2(82, 28)
+		cap_panel.add_theme_stylebox_override("panel", _make_box(COL_INK, COL_RULE_STRONG, 2, 6, 3, 1))
 		row.add_child(cap_panel)
 
 		var cap_lbl := Label.new()
@@ -1117,7 +1406,7 @@ func _build_main_menu() -> void:
 		cap_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		cap_lbl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 		cap_lbl.add_theme_font_override("font", _font_mono_bold)
-		cap_lbl.add_theme_font_size_override("font_size", 11)
+		cap_lbl.add_theme_font_size_override("font_size", 12)
 		cap_lbl.add_theme_color_override("font_color", COL_SODIUM)
 		cap_panel.add_child(cap_lbl)
 
@@ -1125,28 +1414,11 @@ func _build_main_menu() -> void:
 		desc_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		desc_lbl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 		desc_lbl.add_theme_font_override("font", _font_sans)
-		desc_lbl.add_theme_font_size_override("font_size", 13)
-		desc_lbl.add_theme_color_override("font_color", COL_PAPER)
+		desc_lbl.add_theme_font_size_override("font_size", 14)
+		desc_lbl.add_theme_color_override("font_color", COL_PAPER_DIM)
 		row.add_child(desc_lbl)
 
 		_manual_key_rows.append({"id": ks[1], "lbl": desc_lbl})
-
-	var sep_how := ColorRect.new()
-	sep_how.custom_minimum_size = Vector2(0, 1)
-	sep_how.color = COL_RULE
-	hv.add_child(sep_how)
-
-	var how_scroll := ScrollContainer.new()
-	how_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	hv.add_child(how_scroll)
-
-	_how_body_lbl = Label.new()
-	_how_body_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_how_body_lbl.add_theme_font_override("font", _font_sans)
-	_how_body_lbl.add_theme_font_size_override("font_size", 14)
-	_how_body_lbl.add_theme_color_override("font_color", COL_PAPER_DIM)
-	_how_body_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	how_scroll.add_child(_how_body_lbl)
 
 
 func _build_gameplay_hud() -> void:
@@ -1157,64 +1429,64 @@ func _build_gameplay_hud() -> void:
 	_hud_root.visible = false
 	add_child(_hud_root)
 
-	# 1. TOP-LEFT: Pause + Dossier Toggle + Sector Readout + Collapsible Field Dossier
+	# 1. TOP-LEFT: Pause + Dossier Toggle (clean label) + Sector Readout + Collapsible Field Dossier
 	var tl_col := VBoxContainer.new()
-	_anchor_box(tl_col, 0.0, 0.0, 0.0, 0.0, 20.0, 16.0, 368.0, 340.0)
+	_anchor_box(tl_col, 0.0, 0.0, 0.0, 0.0, 20.0, 14.0, 388.0, 360.0)
 	tl_col.add_theme_constant_override("separation", 6)
 	tl_col.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_hud_root.add_child(tl_col)
 
 	var tl_row := HBoxContainer.new()
-	tl_row.add_theme_constant_override("separation", 8)
+	tl_row.add_theme_constant_override("separation", 10)
 	tl_row.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	tl_col.add_child(tl_row)
 
 	_btn_pause = Button.new()
 	_btn_pause.text = ""
-	_btn_pause.custom_minimum_size = Vector2(40, 40)
+	_btn_pause.custom_minimum_size = Vector2(48, 48)
 	_style_button(_btn_pause, false, false)
 	_btn_pause.draw.connect(func():
 		var c := _btn_pause.size * 0.5
 		var col := COL_SODIUM if _btn_pause.is_hovered() else COL_PAPER
-		_btn_pause.draw_rect(Rect2(c + Vector2(-5.0, -6.0), Vector2(3.0, 12.0)), col, true)
-		_btn_pause.draw_rect(Rect2(c + Vector2(2.0, -6.0), Vector2(3.0, 12.0)), col, true)
+		_btn_pause.draw_rect(Rect2(c + Vector2(-6.0, -7.0), Vector2(3.5, 14.0)), col, true)
+		_btn_pause.draw_rect(Rect2(c + Vector2(2.5, -7.0), Vector2(3.5, 14.0)), col, true)
 	)
 	_btn_pause.pressed.connect(func(): toggle_pause_modal(true))
 	tl_row.add_child(_btn_pause)
 
 	_btn_dossier = Button.new()
-	_btn_dossier.custom_minimum_size = Vector2(154, 40)
+	_btn_dossier.custom_minimum_size = Vector2(168, 48)
 	_btn_dossier.icon = AssetLibrary.get_icon("ui_journal")
 	_btn_dossier.expand_icon = true
 	_style_button(_btn_dossier, false, false)
 	_btn_dossier.add_theme_font_override("font", _font_sans_bold)
-	_btn_dossier.add_theme_font_size_override("font_size", 14)
+	_btn_dossier.add_theme_font_size_override("font_size", 16)
 	_btn_dossier.pressed.connect(_toggle_dossier_pinned)
 	tl_row.add_child(_btn_dossier)
 
 	_sector_lbl = Label.new()
 	_sector_lbl.uppercase = true
 	_sector_lbl.add_theme_font_override("font", _font_display_md)
-	_sector_lbl.add_theme_font_size_override("font_size", 14)
+	_sector_lbl.add_theme_font_size_override("font_size", 16)
 	_sector_lbl.add_theme_color_override("font_color", COL_PAPER_DIM)
 	tl_col.add_child(_sector_lbl)
 
 	_dossier_card = PanelContainer.new()
-	_dossier_card.custom_minimum_size = Vector2(336, 0)
-	_dossier_card.add_theme_stylebox_override("panel", _make_box(COL_PANEL, COL_RULE_STRONG, 2, 14, 12, 1))
+	_dossier_card.custom_minimum_size = Vector2(360, 0)
+	_dossier_card.add_theme_stylebox_override("panel", _make_box(COL_PANEL, COL_RULE_STRONG, 2, 16, 13, 1))
 	_attach_corner_ticks(_dossier_card, COL_SODIUM, 8.0, 1.0)
 	_dossier_card.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_dossier_card.visible = false
 	tl_col.add_child(_dossier_card)
 
 	var d_vb := VBoxContainer.new()
-	d_vb.add_theme_constant_override("separation", 6)
+	d_vb.add_theme_constant_override("separation", 7)
 	_dossier_card.add_child(d_vb)
 
 	_obj_header_lbl = Label.new()
 	_obj_header_lbl.uppercase = true
 	_obj_header_lbl.add_theme_font_override("font", _font_display_md)
-	_obj_header_lbl.add_theme_font_size_override("font_size", 15)
+	_obj_header_lbl.add_theme_font_size_override("font_size", 17)
 	_obj_header_lbl.add_theme_color_override("font_color", COL_SODIUM)
 	d_vb.add_child(_obj_header_lbl)
 
@@ -1225,23 +1497,23 @@ func _build_gameplay_hud() -> void:
 
 	for key in ["planks", "cable", "power", "padlock"]:
 		var row := HBoxContainer.new()
-		row.add_theme_constant_override("separation", 8)
+		row.add_theme_constant_override("separation", 9)
 		row.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		d_vb.add_child(row)
 
 		var box := Control.new()
-		box.custom_minimum_size = Vector2(14, 14)
+		box.custom_minimum_size = Vector2(15, 15)
 		box.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 		box.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		box.set_meta("done", false)
 		box.draw.connect(func():
 			var is_done := bool(box.get_meta("done", false))
-			var r := Rect2(Vector2(1, 1), Vector2(12, 12))
+			var r := Rect2(Vector2(1, 1), Vector2(13, 13))
 			if is_done:
 				box.draw_rect(r, Color(COL_PHOSPHOR, 0.16), true)
 				box.draw_rect(r, COL_PHOSPHOR, false, 1.2)
-				box.draw_line(Vector2(3.5, 7.0), Vector2(6.0, 9.5), COL_PHOSPHOR, 1.6, true)
-				box.draw_line(Vector2(6.0, 9.5), Vector2(10.5, 4.2), COL_PHOSPHOR, 1.6, true)
+				box.draw_line(Vector2(3.5, 7.5), Vector2(6.5, 10.5), COL_PHOSPHOR, 1.8, true)
+				box.draw_line(Vector2(6.5, 10.5), Vector2(11.5, 4.5), COL_PHOSPHOR, 1.8, true)
 			else:
 				box.draw_rect(r, COL_RULE_STRONG, false, 1.0)
 		)
@@ -1252,28 +1524,28 @@ func _build_gameplay_hud() -> void:
 		rlbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		rlbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		rlbl.add_theme_font_override("font", _font_sans)
-		rlbl.add_theme_font_size_override("font_size", 14)
+		rlbl.add_theme_font_size_override("font_size", 15)
 		rlbl.add_theme_color_override("font_color", COL_PAPER_DIM)
 		row.add_child(rlbl)
 		_obj_rows[key] = rlbl
 
 	_dossier_code_lbl = Label.new()
 	_dossier_code_lbl.add_theme_font_override("font", _font_mono)
-	_dossier_code_lbl.add_theme_font_size_override("font_size", 12)
+	_dossier_code_lbl.add_theme_font_size_override("font_size", 13)
 	_dossier_code_lbl.add_theme_color_override("font_color", COL_PAPER_DIM)
 	d_vb.add_child(_dossier_code_lbl)
 
 	# 1B. MID-LEFT: Compact НИИ-07 Field Orientation Card (below Dossier, above Touch Joystick)
 	_tut_card = PanelContainer.new()
-	_anchor_box(_tut_card, 0.0, 0.0, 0.0, 0.0, 20.0, 294.0, 344.0, 294.0)
-	_tut_card.custom_minimum_size = Vector2(324, 0)
-	_tut_card.add_theme_stylebox_override("panel", _make_box(COL_PANEL, COL_RULE_STRONG, 2, 14, 11, 1))
+	_anchor_box(_tut_card, 0.0, 0.0, 0.0, 0.0, 20.0, 316.0, 376.0, 316.0)
+	_tut_card.custom_minimum_size = Vector2(356, 0)
+	_tut_card.add_theme_stylebox_override("panel", _make_box(COL_PANEL, COL_RULE_STRONG, 2, 16, 12, 1))
 	_attach_corner_ticks(_tut_card, COL_SODIUM, 9.0, 1.0)
 	_tut_card.visible = false
 	_hud_root.add_child(_tut_card)
 
 	var tut_vb := VBoxContainer.new()
-	tut_vb.add_theme_constant_override("separation", 7)
+	tut_vb.add_theme_constant_override("separation", 8)
 	_tut_card.add_child(tut_vb)
 
 	var tut_hdr := HBoxContainer.new()
@@ -1284,7 +1556,7 @@ func _build_gameplay_hud() -> void:
 	_tut_header_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_tut_header_lbl.uppercase = true
 	_tut_header_lbl.add_theme_font_override("font", _font_display_md)
-	_tut_header_lbl.add_theme_font_size_override("font_size", 15)
+	_tut_header_lbl.add_theme_font_size_override("font_size", 17)
 	_tut_header_lbl.add_theme_color_override("font_color", COL_SODIUM)
 	tut_hdr.add_child(_tut_header_lbl)
 
@@ -1293,7 +1565,7 @@ func _build_gameplay_hud() -> void:
 	_tut_step_lbl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	_tut_step_lbl.text = "1/4"
 	_tut_step_lbl.add_theme_font_override("font", _font_mono_bold)
-	_tut_step_lbl.add_theme_font_size_override("font_size", 12)
+	_tut_step_lbl.add_theme_font_size_override("font_size", 13)
 	_tut_step_lbl.add_theme_color_override("font_color", COL_PAPER_DIM)
 	tut_hdr.add_child(_tut_step_lbl)
 
@@ -1305,19 +1577,19 @@ func _build_gameplay_hud() -> void:
 	_tut_body_lbl = Label.new()
 	_tut_body_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_tut_body_lbl.add_theme_font_override("font", _font_sans)
-	_tut_body_lbl.add_theme_font_size_override("font_size", 14)
+	_tut_body_lbl.add_theme_font_size_override("font_size", 15)
 	_tut_body_lbl.add_theme_color_override("font_color", COL_PAPER)
 	tut_vb.add_child(_tut_body_lbl)
 
 	var tut_btns := HBoxContainer.new()
-	tut_btns.add_theme_constant_override("separation", 8)
+	tut_btns.add_theme_constant_override("separation", 10)
 	tut_vb.add_child(tut_btns)
 
 	_tut_skip_btn = Button.new()
-	_tut_skip_btn.custom_minimum_size = Vector2(0, 32)
+	_tut_skip_btn.custom_minimum_size = Vector2(0, 38)
 	_style_button(_tut_skip_btn, false, false)
 	_tut_skip_btn.add_theme_font_override("font", _font_mono)
-	_tut_skip_btn.add_theme_font_size_override("font_size", 12)
+	_tut_skip_btn.add_theme_font_size_override("font_size", 13)
 	_tut_skip_btn.pressed.connect(func():
 		SynthAudio.play_2d("ui_click", -6.0)
 		dismiss_tutorial()
@@ -1329,25 +1601,61 @@ func _build_gameplay_hud() -> void:
 	tut_btns.add_child(tut_sp)
 
 	_tut_next_btn = Button.new()
-	_tut_next_btn.custom_minimum_size = Vector2(92, 32)
+	_tut_next_btn.custom_minimum_size = Vector2(104, 38)
 	_style_button(_tut_next_btn, true, false)
 	_tut_next_btn.add_theme_font_override("font", _font_mono_bold)
-	_tut_next_btn.add_theme_font_size_override("font_size", 12)
+	_tut_next_btn.add_theme_font_size_override("font_size", 13)
 	_tut_next_btn.pressed.connect(func():
 		SynthAudio.play_2d("ui_click", -6.0)
 		advance_tutorial_if_step(_tut_step)
 	)
 	tut_btns.add_child(_tut_next_btn)
 
-	# 2. TOP-CENTER: Threat / Status Whisper Plate (hidden unless active, auto-centered at any text width)
+	# 2. TOP-CENTER: Sleek Acoustic dB Oscilloscope Instrument ONLY (+ thin Breath Bar underneath when active)
+	var top_bar_wrap := CenterContainer.new()
+	_anchor_box(top_bar_wrap, 0.5, 0.0, 0.5, 0.0, -140.0, 14.0, 140.0, 74.0)
+	top_bar_wrap.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_hud_root.add_child(top_bar_wrap)
+
+	_top_status_bar = PanelContainer.new()
+	_top_status_bar.custom_minimum_size = Vector2(248, 48)
+	_top_bar_style = _make_box(COL_PANEL, COL_RULE_STRONG, 2, 8, 6, 1)
+	_top_status_bar.add_theme_stylebox_override("panel", _top_bar_style)
+	_attach_corner_ticks(_top_status_bar, COL_RULE_STRONG, 7.0, 1.0)
+	_top_status_bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	top_bar_wrap.add_child(_top_status_bar)
+
+	var top_vb := VBoxContainer.new()
+	top_vb.add_theme_constant_override("separation", 4)
+	top_vb.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_top_status_bar.add_child(top_vb)
+
+	_acoustic_scope = AcousticScopeControl.new()
+	_acoustic_scope.custom_minimum_size = Vector2(232, 42)
+	_acoustic_scope.mono_font = _font_mono
+	_acoustic_scope.mono_bold = _font_mono_bold
+	top_vb.add_child(_acoustic_scope)
+
+	_breath_bar = ProgressBar.new()
+	_breath_bar.max_value = 100.0
+	_breath_bar.value = 100.0
+	_breath_bar.show_percentage = false
+	_breath_bar.custom_minimum_size = Vector2(232, 5)
+	_breath_bar.add_theme_stylebox_override("background", _make_box(COL_INK, COL_RULE, 1, 0, 0, 1))
+	_breath_bar.add_theme_stylebox_override("fill", _make_box(COL_COLD, Color.TRANSPARENT, 1, 0, 0, 0))
+	_breath_bar.visible = false
+	top_vb.add_child(_breath_bar)
+
+	# 2B. TOP-CENTER THREAT / STATUS WHISPER (directly below Acoustic Oscilloscope at y = 76)
 	var status_wrap := CenterContainer.new()
-	_anchor_box(status_wrap, 0.0, 0.0, 1.0, 0.0, 240.0, 16.0, -240.0, 60.0)
+	_anchor_box(status_wrap, 0.0, 0.0, 1.0, 0.0, 220.0, 76.0, -220.0, 122.0)
 	status_wrap.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_hud_root.add_child(status_wrap)
 
 	_status_pill = PanelContainer.new()
-	_status_pill.custom_minimum_size = Vector2(340, 38)
-	_status_pill.add_theme_stylebox_override("panel", _make_box(COL_PANEL, COL_RULE_STRONG, 2, 16, 7, 1))
+	_status_pill.custom_minimum_size = Vector2(340, 40)
+	_status_pill_style = _make_box(COL_PANEL, COL_RULE_STRONG, 2, 16, 7, 1)
+	_status_pill.add_theme_stylebox_override("panel", _status_pill_style)
 	_attach_corner_ticks(_status_pill, COL_SODIUM, 7.0, 1.0)
 	_status_pill.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_status_pill.visible = false
@@ -1357,101 +1665,21 @@ func _build_gameplay_hud() -> void:
 	_stalker_alert_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_stalker_alert_lbl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	_stalker_alert_lbl.add_theme_font_override("font", _font_sans_bold)
-	_stalker_alert_lbl.add_theme_font_size_override("font_size", 14)
+	_stalker_alert_lbl.add_theme_font_size_override("font_size", 15)
 	_stalker_alert_lbl.add_theme_color_override("font_color", COL_PAPER)
 	_status_pill.add_child(_stalker_alert_lbl)
 
-	# 3. TOP-RIGHT: CRT Phosphor Sonar Scope + Oscilloscope + Micro-Vitals Instrument
+	# 3. TOP-RIGHT: Clean Static Square-Framed LoS Map ONLY
 	var tr_col := VBoxContainer.new()
-	_anchor_box(tr_col, 1.0, 0.0, 1.0, 0.0, -224.0, 14.0, -20.0, 340.0)
-	tr_col.add_theme_constant_override("separation", 5)
+	_anchor_box(tr_col, 1.0, 0.0, 1.0, 0.0, -200.0, 14.0, -20.0, 194.0)
+	tr_col.add_theme_constant_override("separation", 0)
 	tr_col.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_hud_root.add_child(tr_col)
 
 	minimap = LoSMinimapControl.new()
 	tr_col.add_child(minimap)
 
-	var tr_meta_panel := PanelContainer.new()
-	tr_meta_panel.custom_minimum_size = Vector2(204, 0)
-	tr_meta_panel.add_theme_stylebox_override("panel", _make_box(COL_INK, COL_RULE, 2, 10, 7, 1))
-	tr_meta_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	tr_col.add_child(tr_meta_panel)
-
-	var tr_meta_col := VBoxContainer.new()
-	tr_meta_col.add_theme_constant_override("separation", 5)
-	tr_meta_col.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	tr_meta_panel.add_child(tr_meta_col)
-
-	var vitals_row := HBoxContainer.new()
-	vitals_row.add_theme_constant_override("separation", 6)
-	vitals_row.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	tr_meta_col.add_child(vitals_row)
-
-	_vitals_lbl = Label.new()
-	_vitals_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_vitals_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	_vitals_lbl.add_theme_font_override("font", _font_sans_bold)
-	_vitals_lbl.add_theme_font_size_override("font_size", 12)
-	_vitals_lbl.add_theme_color_override("font_color", COL_PAPER_DIM)
-	vitals_row.add_child(_vitals_lbl)
-
-	_mode_tag_lbl = Label.new()
-	_mode_tag_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-	_mode_tag_lbl.add_theme_font_override("font", _font_mono_bold)
-	_mode_tag_lbl.add_theme_font_size_override("font_size", 11)
-	_mode_tag_lbl.add_theme_color_override("font_color", COL_SODIUM)
-	vitals_row.add_child(_mode_tag_lbl)
-
-	var bat_row := HBoxContainer.new()
-	bat_row.add_theme_constant_override("separation", 6)
-	bat_row.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	tr_meta_col.add_child(bat_row)
-
-	_battery_meter = Control.new()
-	_battery_meter.custom_minimum_size = Vector2(72, 10)
-	_battery_meter.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	_battery_meter.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_battery_meter.draw.connect(func():
-		var segs := 6
-		var w_tot := _battery_meter.size.x
-		var gap := 2.0
-		var seg_w := (w_tot - gap * float(segs - 1)) / float(segs)
-		var lit := int(ceil(_battery_val * float(segs)))
-		var fill_col := COL_SIGNAL if _battery_val <= 0.28 else (COL_SODIUM if _battery_val <= 0.45 else COL_PHOSPHOR)
-		for i in range(segs):
-			var r := Rect2(Vector2(float(i) * (seg_w + gap), 1.0), Vector2(seg_w, 8.0))
-			if i < lit:
-				_battery_meter.draw_rect(r, fill_col, true)
-			else:
-				_battery_meter.draw_rect(r, Color(COL_RULE_STRONG, 0.35), false, 1.0)
-	)
-	bat_row.add_child(_battery_meter)
-
-	_battery_hint_lbl = Label.new()
-	_battery_hint_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_battery_hint_lbl.add_theme_font_override("font", _font_mono_bold)
-	_battery_hint_lbl.add_theme_font_size_override("font_size", 11)
-	_battery_hint_lbl.add_theme_color_override("font_color", COL_SODIUM)
-	bat_row.add_child(_battery_hint_lbl)
-
-	_battery_lbl = Label.new()
-	_battery_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-	_battery_lbl.add_theme_font_override("font", _font_mono_bold)
-	_battery_lbl.add_theme_font_size_override("font_size", 12)
-	_battery_lbl.add_theme_color_override("font_color", COL_PAPER_DIM)
-	bat_row.add_child(_battery_lbl)
-
-	_breath_bar = ProgressBar.new()
-	_breath_bar.max_value = 100.0
-	_breath_bar.value = 100.0
-	_breath_bar.show_percentage = false
-	_breath_bar.custom_minimum_size = Vector2(180, 4)
-	_breath_bar.add_theme_stylebox_override("background", _make_box(COL_INK, COL_RULE, 1, 0, 0, 1))
-	_breath_bar.add_theme_stylebox_override("fill", _make_box(COL_COLD, Color.TRANSPARENT, 1, 0, 0, 0))
-	_breath_bar.visible = false
-	tr_meta_col.add_child(_breath_bar)
-
-	# 4. CENTER RETICLE & CONTEXTUAL INTERACTION PROMPT
+	# 4. CENTER RETICLE & CLEAN CONTEXTUAL INTERACTION PROMPT (Tappable on Mobile, NO [E] Keycap)
 	_reticle_dot = ColorRect.new()
 	_anchor_box(_reticle_dot, 0.5, 0.5, 0.5, 0.5, -1.0, -1.0, 1.0, 1.0)
 	_reticle_dot.color = Color(COL_PAPER, 0.85)
@@ -1464,9 +1692,9 @@ func _build_gameplay_hud() -> void:
 	_reticle_canvas.draw.connect(func():
 		var c := _reticle_canvas.size * 0.5
 		var g := _reticle_gap
-		var l := 5.0 if _reticle_active else 4.0
+		var l := 5.5 if _reticle_active else 4.0
 		var col := COL_SODIUM if _reticle_active else Color(COL_PAPER, 0.62)
-		var w := 1.6 if _reticle_active else 1.2
+		var w := 1.8 if _reticle_active else 1.2
 		_reticle_canvas.draw_line(c + Vector2(-g - l, 0), c + Vector2(-g, 0), col, w)
 		_reticle_canvas.draw_line(c + Vector2(g, 0), c + Vector2(g + l, 0), col, w)
 		_reticle_canvas.draw_line(c + Vector2(0, -g - l), c + Vector2(0, -g), col, w)
@@ -1475,58 +1703,56 @@ func _build_gameplay_hud() -> void:
 	_hud_root.add_child(_reticle_canvas)
 
 	var prompt_wrap := CenterContainer.new()
-	_anchor_box(prompt_wrap, 0.0, 0.5, 1.0, 0.5, 0.0, 28.0, 0.0, 74.0)
+	_anchor_box(prompt_wrap, 0.0, 0.5, 1.0, 0.5, 0.0, 28.0, 0.0, 80.0)
 	prompt_wrap.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_hud_root.add_child(prompt_wrap)
 
 	_prompt_box = PanelContainer.new()
-	_prompt_box.custom_minimum_size = Vector2(240, 40)
-	_prompt_box.add_theme_stylebox_override("panel", _make_box(COL_PANEL, Color(COL_SODIUM, 0.68), 2, 14, 7, 1))
+	_prompt_box.custom_minimum_size = Vector2(240, 46)
+	_prompt_box.add_theme_stylebox_override("panel", _make_box(COL_PANEL, Color(COL_SODIUM, 0.72), 2, 16, 9, 1))
 	_attach_corner_ticks(_prompt_box, COL_SODIUM, 6.0, 1.0)
-	_prompt_box.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_prompt_box.mouse_filter = Control.MOUSE_FILTER_PASS
 	_prompt_box.visible = false
+	_prompt_box.gui_input.connect(func(ev: InputEvent):
+		if ev is InputEventMouseButton:
+			var mb := ev as InputEventMouseButton
+			if mb.pressed and mb.button_index == MOUSE_BUTTON_LEFT and player != null:
+				player.trigger_interact()
+	)
 	prompt_wrap.add_child(_prompt_box)
 
 	var phb := HBoxContainer.new()
 	phb.alignment = BoxContainer.ALIGNMENT_CENTER
-	phb.add_theme_constant_override("separation", 8)
+	phb.add_theme_constant_override("separation", 10)
+	phb.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_prompt_box.add_child(phb)
-
-	var key_badge := PanelContainer.new()
-	key_badge.add_theme_stylebox_override("panel", _make_box(COL_INK, COL_SODIUM, 2, 7, 2, 1))
-	phb.add_child(key_badge)
-
-	_prompt_key_lbl = Label.new()
-	_prompt_key_lbl.text = "E"
-	_prompt_key_lbl.add_theme_font_override("font", _font_mono_bold)
-	_prompt_key_lbl.add_theme_font_size_override("font_size", 12)
-	_prompt_key_lbl.add_theme_color_override("font_color", COL_SODIUM)
-	key_badge.add_child(_prompt_key_lbl)
 
 	_prompt_icon = TextureRect.new()
 	_prompt_icon.texture = AssetLibrary.get_icon("ui_hand")
 	_prompt_icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	_prompt_icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-	_prompt_icon.custom_minimum_size = Vector2(20, 20)
+	_prompt_icon.custom_minimum_size = Vector2(22, 22)
+	_prompt_icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	phb.add_child(_prompt_icon)
 
 	_prompt_lbl = Label.new()
 	_prompt_lbl.add_theme_font_override("font", _font_sans_bold)
-	_prompt_lbl.add_theme_font_size_override("font_size", 14)
+	_prompt_lbl.add_theme_font_size_override("font_size", 16)
 	_prompt_lbl.add_theme_color_override("font_color", COL_PAPER)
+	_prompt_lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	phb.add_child(_prompt_lbl)
 
-	# 5. BOTTOM-CENTER: Toast + Equipped Readout + 5x 58px Tactical Inventory Slots + Desktop Legend
+	# 5. BOTTOM-CENTER: Toast + Equipped Readout + 5x 68px Tactical Inventory Slots (NO PC Hint Strip)
 	var inv_anchor := VBoxContainer.new()
-	_anchor_box(inv_anchor, 0.5, 1.0, 0.5, 1.0, -360.0, -158.0, 360.0, -10.0)
+	_anchor_box(inv_anchor, 0.5, 1.0, 0.5, 1.0, -360.0, -156.0, 360.0, -14.0)
 	inv_anchor.alignment = BoxContainer.ALIGNMENT_END
 	inv_anchor.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	inv_anchor.add_theme_constant_override("separation", 5)
+	inv_anchor.add_theme_constant_override("separation", 6)
 	_hud_root.add_child(inv_anchor)
 
 	_toast_plate = PanelContainer.new()
 	_toast_plate.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
-	_toast_plate.add_theme_stylebox_override("panel", _make_box(COL_INK, Color(COL_SODIUM, 0.55), 2, 12, 4, 1))
+	_toast_plate.add_theme_stylebox_override("panel", _make_box(COL_INK, Color(COL_SODIUM, 0.55), 2, 14, 5, 1))
 	_toast_plate.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_toast_plate.visible = false
 	inv_anchor.add_child(_toast_plate)
@@ -1534,25 +1760,25 @@ func _build_gameplay_hud() -> void:
 	_toast_lbl = Label.new()
 	_toast_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_toast_lbl.add_theme_font_override("font", _font_sans_bold)
-	_toast_lbl.add_theme_font_size_override("font_size", 14)
+	_toast_lbl.add_theme_font_size_override("font_size", 15)
 	_toast_lbl.add_theme_color_override("font_color", COL_SODIUM)
 	_toast_plate.add_child(_toast_lbl)
 
 	_held_item_lbl = Label.new()
 	_held_item_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_held_item_lbl.add_theme_font_override("font", _font_sans_bold)
-	_held_item_lbl.add_theme_font_size_override("font_size", 14)
+	_held_item_lbl.add_theme_font_size_override("font_size", 16)
 	_held_item_lbl.add_theme_color_override("font_color", COL_PAPER)
 	inv_anchor.add_child(_held_item_lbl)
 
 	var slots_hb := HBoxContainer.new()
 	slots_hb.alignment = BoxContainer.ALIGNMENT_CENTER
-	slots_hb.add_theme_constant_override("separation", 8)
+	slots_hb.add_theme_constant_override("separation", 10)
 	inv_anchor.add_child(slots_hb)
 
 	for s_idx in range(ListenerPlayer.MAX_SLOTS):
 		var sb := Button.new()
-		sb.custom_minimum_size = Vector2(58, 58)
+		sb.custom_minimum_size = Vector2(68, 68)
 		sb.add_theme_stylebox_override("focus", _make_box(Color.TRANSPARENT, COL_SODIUM, 2, 4, 4, 1))
 		var captured := s_idx
 		sb.pressed.connect(func():
@@ -1565,10 +1791,10 @@ func _build_gameplay_hud() -> void:
 
 		var ic := TextureRect.new()
 		ic.set_anchors_preset(Control.PRESET_FULL_RECT)
-		ic.offset_left = 9
-		ic.offset_top = 9
-		ic.offset_right = -9
-		ic.offset_bottom = -9
+		ic.offset_left = 12
+		ic.offset_top = 12
+		ic.offset_right = -12
+		ic.offset_bottom = -12
 		ic.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 		ic.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 		ic.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -1577,60 +1803,45 @@ func _build_gameplay_hud() -> void:
 
 		var num := Label.new()
 		num.text = str(s_idx + 1)
-		num.position = Vector2(5, 2)
+		num.position = Vector2(6, 3)
 		num.add_theme_font_override("font", _font_mono_bold)
-		num.add_theme_font_size_override("font_size", 11)
+		num.add_theme_font_size_override("font_size", 13)
 		num.add_theme_color_override("font_color", COL_PAPER_DIM)
 		sb.add_child(num)
 		_slot_nums.append(num)
 
-	_legend_lbl = Label.new()
-	_legend_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_legend_lbl.add_theme_font_override("font", _font_mono)
-	_legend_lbl.add_theme_font_size_override("font_size", 11)
-	_legend_lbl.add_theme_color_override("font_color", COL_PAPER_DIM)
-	inv_anchor.add_child(_legend_lbl)
-
-	# 6. MOBILE TOUCH CONTROLS: Floating Dynamic Joystick + Ergonomic Right-Hand Arc (88px primary, >=56px secondary)
+	# 6. MOBILE TOUCH CONTROLS:
+	#    - Left Floating Virtual Joystick (168x168, 66x66 knob, outer 75% auto-sprint ring)
+	#    - Double-Tap Right Side to Interact (no Interact/Sprint buttons!)
+	#    - Symmetrical 2x2 Bottom-Right Action Grid (72x72, 14px gaps; Drop appears only when holding an item)
 	_joy_base = Panel.new()
-	_anchor_box(_joy_base, 0.0, 1.0, 0.0, 1.0, 36.0, -180.0, 180.0, -36.0)
-	_joy_base.custom_minimum_size = Vector2(144, 144)
-	_joy_base.add_theme_stylebox_override("panel", _make_box(Color(COL_INK.r, COL_INK.g, COL_INK.b, 0.62), COL_RULE_STRONG, 72, 0, 0, 1))
+	_anchor_box(_joy_base, 0.0, 1.0, 0.0, 1.0, 32.0, -200.0, 200.0, -32.0)
+	_joy_base.custom_minimum_size = Vector2(JOY_SIZE, JOY_SIZE)
+	_joy_base.add_theme_stylebox_override("panel", _make_box(Color(COL_INK.r, COL_INK.g, COL_INK.b, 0.56), COL_RULE_STRONG, int(JOY_SIZE * 0.5), 0, 0, 1))
 	_joy_base.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_joy_base.draw.connect(func():
 		var c := _joy_base.size * 0.5
-		var r := 68.0
 		var active := (_joy_touch_idx != -1)
-		var ring_col := Color(COL_SODIUM, 0.72) if active else Color(COL_PAPER_DIM, 0.32)
-		_joy_base.draw_arc(c, r, 0.0, TAU, 48, ring_col, 1.5, true)
+		var outer_col := Color(COL_SODIUM, 0.72) if active else Color(COL_PAPER_DIM, 0.30)
+		_joy_base.draw_arc(c, JOY_MAX_R + 6.0, 0.0, TAU, 56, outer_col, 1.4, true)
+		var sprint_r := JOY_MAX_R * JOY_SPRINT_RATIO
+		var sprint_col := COL_SODIUM if _joy_sprinting else Color(COL_SODIUM, 0.28 if active else 0.16)
+		var sprint_w := 2.4 if _joy_sprinting else 1.2
+		_joy_base.draw_arc(c, sprint_r, 0.0, TAU, 48, sprint_col, sprint_w, true)
 		_joy_base.draw_line(c + Vector2(-10, 0), c + Vector2(10, 0), Color(COL_PAPER_DIM, 0.25), 1.0)
 		_joy_base.draw_line(c + Vector2(0, -10), c + Vector2(0, 10), Color(COL_PAPER_DIM, 0.25), 1.0)
 	)
 	_hud_root.add_child(_joy_base)
 
 	_joy_knob = Panel.new()
-	_joy_knob.custom_minimum_size = Vector2(56, 56)
-	_joy_knob.position = Vector2(44, 44)
-	_joy_knob.add_theme_stylebox_override("panel", _make_box(Color(COL_PAPER.r, COL_PAPER.g, COL_PAPER.b, 0.78), COL_SODIUM, 28, 0, 0, 1))
+	_joy_knob.custom_minimum_size = Vector2(JOY_KNOB_SIZE, JOY_KNOB_SIZE)
+	_joy_knob.position = JOY_REST_POS
+	_joy_knob.add_theme_stylebox_override("panel", _make_box(Color(COL_PAPER.r, COL_PAPER.g, COL_PAPER.b, 0.80), COL_SODIUM, int(JOY_KNOB_SIZE * 0.5), 0, 0, 1))
 	_joy_knob.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_joy_base.add_child(_joy_knob)
 
-	_btn_sprint = _make_icon_action_btn("ui_run", Vector2(42, -264), Vector2(56, 56), Control.PRESET_BOTTOM_LEFT)
-	_btn_sprint.toggle_mode = true
-	_btn_sprint.toggled.connect(func(on: bool):
-		if player != null:
-			player.touch_sprinting = on
-	)
-
-	# Primary Interact: 88x88
-	_btn_interact = _make_icon_action_btn("ui_hand", Vector2(-132, -144), Vector2(88, 88), Control.PRESET_BOTTOM_RIGHT, true)
-	_btn_interact.pressed.connect(func():
-		if player != null:
-			player.trigger_interact()
-	)
-
-	# Secondary ergonomic arc (>= 56x56 with >= 12px gaps)
-	_btn_breath = _make_icon_action_btn("ui_breath", Vector2(-118, -216), Vector2(58, 58), Control.PRESET_BOTTOM_RIGHT)
+	# Symmetrical 2x2 Thumb Grid (72x72, 14px gap, 24px right margin, 28px bottom margin)
+	_btn_breath = _make_icon_action_btn("ui_breath", Vector2(-96, -100), Vector2(72, 72), Control.PRESET_BOTTOM_RIGHT)
 	_btn_breath.button_down.connect(func():
 		if player != null:
 			player.touch_holding_breath = true
@@ -1640,23 +1851,38 @@ func _build_gameplay_hud() -> void:
 			player.touch_holding_breath = false
 	)
 
-	_btn_crouch = _make_icon_action_btn("ui_crouch", Vector2(-204, -124), Vector2(58, 58), Control.PRESET_BOTTOM_RIGHT)
+	_btn_crouch = _make_icon_action_btn("ui_crouch", Vector2(-182, -100), Vector2(72, 72), Control.PRESET_BOTTOM_RIGHT)
 	_btn_crouch.pressed.connect(func():
 		if player != null:
 			player.toggle_crouch()
 	)
 
-	_btn_drop = _make_icon_action_btn("ui_drop", Vector2(-202, -206), Vector2(58, 58), Control.PRESET_BOTTOM_RIGHT)
+	_btn_flashlight = _make_icon_action_btn("ui_flashlight", Vector2(-96, -186), Vector2(72, 72), Control.PRESET_BOTTOM_RIGHT)
+	_btn_flashlight.pressed.connect(func():
+		if player != null:
+			player.toggle_flashlight()
+	)
+
+	_btn_drop = _make_icon_action_btn("ui_drop", Vector2(-182, -186), Vector2(72, 72), Control.PRESET_BOTTOM_RIGHT)
 	_btn_drop.pressed.connect(func():
 		if player != null:
 			player.drop_or_throw_equipped()
 	)
 
-	_btn_flashlight = _make_icon_action_btn("ui_flashlight", Vector2(-136, -288), Vector2(56, 56), Control.PRESET_BOTTOM_RIGHT)
-	_btn_flashlight.pressed.connect(func():
-		if player != null:
-			player.toggle_flashlight()
+	# Double-tap visual confirmation ripple
+	_tap_ripple_ctrl = Control.new()
+	_tap_ripple_ctrl.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_tap_ripple_ctrl.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_tap_ripple_ctrl.visible = false
+	_tap_ripple_ctrl.draw.connect(func():
+		if _tap_ripple_timer <= 0.0:
+			return
+		var t := 1.0 - (_tap_ripple_timer / 0.28)
+		var r := lerpf(10.0, 34.0, t)
+		var a := clampf(1.0 - t, 0.0, 1.0) * 0.85
+		_tap_ripple_ctrl.draw_arc(_tap_ripple_pos, r, 0.0, TAU, 28, Color(COL_SODIUM, a), 2.0, true)
 	)
+	_hud_root.add_child(_tap_ripple_ctrl)
 
 	_is_touch_device = OS.get_name() == "Android" or DisplayServer.is_touchscreen_available()
 	_set_touch_controls_visible(_is_touch_device)
@@ -1669,18 +1895,21 @@ func _toggle_dossier_pinned() -> void:
 	if _dossier_card.visible:
 		_tween_pop_in(_dossier_card, 0.98, 0.90, 0.16)
 	_style_button(_btn_dossier, false, _dossier_pinned)
+	_btn_dossier.add_theme_font_size_override("font_size", 16)
 	advance_tutorial_if_step(4)
 
 
 func _set_touch_controls_visible(vis: bool) -> void:
-	for w in [_joy_base, _btn_sprint, _btn_interact, _btn_breath, _btn_flashlight, _btn_crouch, _btn_drop]:
+	_touch_controls_visible = vis
+	for w in [_joy_base, _btn_breath, _btn_flashlight, _btn_crouch]:
 		if w != null:
 			w.visible = vis
-	if _legend_lbl != null:
-		_legend_lbl.visible = not vis
+	if _btn_drop != null:
+		var has_item := (player != null and not player.get_equipped_item().is_empty())
+		_btn_drop.visible = vis and has_item
 
 
-func _make_icon_action_btn(icon_id: String, pos: Vector2, sz: Vector2, preset: Control.LayoutPreset, primary: bool = false) -> Button:
+func _make_icon_action_btn(icon_id: String, pos: Vector2, sz: Vector2, preset: Control.LayoutPreset) -> Button:
 	var b := Button.new()
 	b.set_anchors_preset(preset)
 	b.offset_left = pos.x
@@ -1688,19 +1917,13 @@ func _make_icon_action_btn(icon_id: String, pos: Vector2, sz: Vector2, preset: C
 	b.offset_right = pos.x + sz.x
 	b.offset_bottom = pos.y + sz.y
 	b.custom_minimum_size = sz
-	var bg := Color(0.14, 0.11, 0.06, 0.90) if primary else Color(COL_PANEL.r, COL_PANEL.g, COL_PANEL.b, 0.86)
-	var brd := COL_SODIUM if primary else COL_RULE_STRONG
-	var rad := int(sz.x * 0.5)
-	b.add_theme_stylebox_override("normal", _make_box(bg, brd, rad, 6, 6, 1))
-	b.add_theme_stylebox_override("hover", _make_box(COL_PANEL_HI, COL_SODIUM, rad, 6, 6, 1))
-	b.add_theme_stylebox_override("pressed", _make_box(Color(COL_SODIUM, 0.35), COL_SODIUM, rad, 6, 6, 1))
-	b.add_theme_stylebox_override("focus", _make_box(bg, COL_SODIUM, rad, 6, 6, 1))
+	_apply_touch_btn_highlight(b, false, COL_SODIUM)
 	_hud_root.add_child(b)
 
 	var tr := TextureRect.new()
 	tr.texture = AssetLibrary.get_icon(icon_id)
 	tr.set_anchors_preset(Control.PRESET_FULL_RECT)
-	var pad := 16 if primary else 12
+	var pad := 14
 	tr.offset_left = pad
 	tr.offset_top = pad
 	tr.offset_right = -pad
@@ -1712,12 +1935,29 @@ func _make_icon_action_btn(icon_id: String, pos: Vector2, sz: Vector2, preset: C
 	return b
 
 
+func _apply_touch_btn_highlight(b: Button, active: bool, active_col: Color, idle_border_col: Color = COL_RULE_STRONG) -> void:
+	if b == null:
+		return
+	var state_key := "%s_%s_%s" % [str(active), active_col.to_html(false), idle_border_col.to_html(true)]
+	if str(b.get_meta("hl_key", "")) == state_key:
+		return
+	b.set_meta("hl_key", state_key)
+	var bg := Color(active_col.r * 0.24, active_col.g * 0.24, active_col.b * 0.24, 0.90) if active else Color(COL_PANEL.r, COL_PANEL.g, COL_PANEL.b, 0.88)
+	var brd := active_col if active else idle_border_col
+	var rad := 6
+	b.add_theme_stylebox_override("normal", _make_box(bg, brd, rad, 6, 6, 1))
+	b.add_theme_stylebox_override("hover", _make_box(COL_PANEL_HI, active_col, rad, 6, 6, 1))
+	b.add_theme_stylebox_override("pressed", _make_box(Color(active_col, 0.35), active_col, rad, 6, 6, 1))
+	b.add_theme_stylebox_override("focus", _make_box(bg, active_col, rad, 6, 6, 1))
+	_attach_corner_ticks(b, active_col if active else idle_border_col, 7.0, 1.5)
+
+
 func _build_safe_keypad_modal() -> void:
 	_safe_modal = PanelContainer.new()
 	_safe_modal.theme = _theme
-	_anchor_box(_safe_modal, 0.5, 0.5, 0.5, 0.5, -172.0, -220.0, 172.0, 220.0)
-	_safe_modal.custom_minimum_size = Vector2(344, 440)
-	_safe_modal.add_theme_stylebox_override("panel", _make_box(COL_PANEL, COL_RULE_STRONG, 3, 20, 18, 1))
+	_anchor_box(_safe_modal, 0.5, 0.5, 0.5, 0.5, -188.0, -236.0, 188.0, 236.0)
+	_safe_modal.custom_minimum_size = Vector2(376, 472)
+	_safe_modal.add_theme_stylebox_override("panel", _make_box(COL_PANEL, COL_RULE_STRONG, 3, 22, 20, 1))
 	_attach_corner_ticks(_safe_modal, COL_SODIUM, 11.0, 1.0)
 	_safe_modal.visible = false
 	add_child(_safe_modal)
@@ -1730,7 +1970,7 @@ func _build_safe_keypad_modal() -> void:
 	_safe_title_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_safe_title_lbl.uppercase = true
 	_safe_title_lbl.add_theme_font_override("font", _font_display)
-	_safe_title_lbl.add_theme_font_size_override("font_size", 20)
+	_safe_title_lbl.add_theme_font_size_override("font_size", 24)
 	_safe_title_lbl.add_theme_color_override("font_color", COL_PAPER)
 	vb.add_child(_safe_title_lbl)
 
@@ -1742,14 +1982,14 @@ func _build_safe_keypad_modal() -> void:
 	_safe_display_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_safe_display_lbl.text = "_ _ _ _"
 	_safe_display_lbl.add_theme_font_override("font", _font_mono_bold)
-	_safe_display_lbl.add_theme_font_size_override("font_size", 32)
+	_safe_display_lbl.add_theme_font_size_override("font_size", 34)
 	_safe_display_lbl.add_theme_color_override("font_color", COL_SODIUM)
 	disp_bezel.add_child(_safe_display_lbl)
 
 	_safe_hint_lbl = Label.new()
 	_safe_hint_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_safe_hint_lbl.add_theme_font_override("font", _font_mono)
-	_safe_hint_lbl.add_theme_font_size_override("font_size", 12)
+	_safe_hint_lbl.add_theme_font_size_override("font_size", 14)
 	_safe_hint_lbl.add_theme_color_override("font_color", COL_PAPER_DIM)
 	_safe_hint_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	vb.add_child(_safe_hint_lbl)
@@ -1764,7 +2004,7 @@ func _build_safe_keypad_modal() -> void:
 	for k in keys:
 		var kb := Button.new()
 		kb.text = k
-		kb.custom_minimum_size = Vector2(96, 52)
+		kb.custom_minimum_size = Vector2(104, 56)
 		if k == "X":
 			kb.add_theme_stylebox_override("normal", _make_box(Color(0.16, 0.07, 0.06, 0.94), Color(COL_SIGNAL, 0.7), 2, 0, 0, 1))
 			kb.add_theme_stylebox_override("hover", _make_box(Color(0.24, 0.09, 0.08, 0.98), COL_SIGNAL, 2, 0, 0, 1))
@@ -1775,7 +2015,7 @@ func _build_safe_keypad_modal() -> void:
 		else:
 			_style_button(kb, false, false)
 		kb.add_theme_font_override("font", _font_mono_bold)
-		kb.add_theme_font_size_override("font_size", 18)
+		kb.add_theme_font_size_override("font_size", 20)
 		var cap_k: String = k
 		kb.pressed.connect(func(): _on_safe_key_pressed(cap_k))
 		grid.add_child(kb)
@@ -1832,12 +2072,12 @@ func close_safe_modal() -> void:
 
 
 func _build_pause_and_end_modals() -> void:
-	var modal_style := _make_box(COL_PANEL, COL_RULE_STRONG, 3, 24, 22, 1)
+	var modal_style := _make_box(COL_PANEL, COL_RULE_STRONG, 3, 26, 24, 1)
 
 	_pause_modal = PanelContainer.new()
 	_pause_modal.theme = _theme
-	_anchor_box(_pause_modal, 0.5, 0.5, 0.5, 0.5, -180.0, -148.0, 180.0, 148.0)
-	_pause_modal.custom_minimum_size = Vector2(360, 296)
+	_anchor_box(_pause_modal, 0.5, 0.5, 0.5, 0.5, -196.0, -160.0, 196.0, 160.0)
+	_pause_modal.custom_minimum_size = Vector2(392, 320)
 	_pause_modal.add_theme_stylebox_override("panel", modal_style)
 	_attach_corner_ticks(_pause_modal, COL_SODIUM, 11.0, 1.0)
 	_pause_modal.visible = false
@@ -1852,7 +2092,7 @@ func _build_pause_and_end_modals() -> void:
 	_pause_title_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_pause_title_lbl.uppercase = true
 	_pause_title_lbl.add_theme_font_override("font", _font_display)
-	_pause_title_lbl.add_theme_font_size_override("font_size", 28)
+	_pause_title_lbl.add_theme_font_size_override("font_size", 32)
 	_pause_title_lbl.add_theme_color_override("font_color", COL_PAPER)
 	pv.add_child(_pause_title_lbl)
 
@@ -1862,7 +2102,7 @@ func _build_pause_and_end_modals() -> void:
 	pv.add_child(p_sep)
 
 	_btn_resume = Button.new()
-	_btn_resume.custom_minimum_size = Vector2(0, 46)
+	_btn_resume.custom_minimum_size = Vector2(0, 52)
 	_style_button(_btn_resume, true, false)
 	_btn_resume.pressed.connect(func():
 		toggle_pause_modal(false)
@@ -1871,7 +2111,7 @@ func _build_pause_and_end_modals() -> void:
 	pv.add_child(_btn_resume)
 
 	_btn_restart = Button.new()
-	_btn_restart.custom_minimum_size = Vector2(0, 44)
+	_btn_restart.custom_minimum_size = Vector2(0, 50)
 	_style_button(_btn_restart, false, false)
 	_btn_restart.pressed.connect(func():
 		toggle_pause_modal(false)
@@ -1880,7 +2120,7 @@ func _build_pause_and_end_modals() -> void:
 	pv.add_child(_btn_restart)
 
 	_btn_to_menu = Button.new()
-	_btn_to_menu.custom_minimum_size = Vector2(0, 44)
+	_btn_to_menu.custom_minimum_size = Vector2(0, 50)
 	_style_button(_btn_to_menu, false, false)
 	_btn_to_menu.pressed.connect(func():
 		toggle_pause_modal(false)
@@ -1890,8 +2130,8 @@ func _build_pause_and_end_modals() -> void:
 
 	_end_modal = PanelContainer.new()
 	_end_modal.theme = _theme
-	_anchor_box(_end_modal, 0.5, 0.5, 0.5, 0.5, -236.0, -162.0, 236.0, 162.0)
-	_end_modal.custom_minimum_size = Vector2(472, 324)
+	_anchor_box(_end_modal, 0.5, 0.5, 0.5, 0.5, -250.0, -172.0, 250.0, 172.0)
+	_end_modal.custom_minimum_size = Vector2(500, 344)
 	_end_modal.add_theme_stylebox_override("panel", modal_style)
 	_attach_corner_ticks(_end_modal, COL_SODIUM, 12.0, 1.0)
 	_end_modal.visible = false
@@ -1906,7 +2146,7 @@ func _build_pause_and_end_modals() -> void:
 	_end_title_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_end_title_lbl.uppercase = true
 	_end_title_lbl.add_theme_font_override("font", _font_display)
-	_end_title_lbl.add_theme_font_size_override("font_size", 32)
+	_end_title_lbl.add_theme_font_size_override("font_size", 36)
 	ev.add_child(_end_title_lbl)
 
 	var e_sep := ColorRect.new()
@@ -1918,12 +2158,12 @@ func _build_pause_and_end_modals() -> void:
 	_end_sub_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_end_sub_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_end_sub_lbl.add_theme_font_override("font", _font_sans)
-	_end_sub_lbl.add_theme_font_size_override("font_size", 15)
+	_end_sub_lbl.add_theme_font_size_override("font_size", 16)
 	_end_sub_lbl.add_theme_color_override("font_color", COL_PAPER_DIM)
 	ev.add_child(_end_sub_lbl)
 
 	_btn_play_again = Button.new()
-	_btn_play_again.custom_minimum_size = Vector2(0, 48)
+	_btn_play_again.custom_minimum_size = Vector2(0, 52)
 	_style_button(_btn_play_again, true, false)
 	_btn_play_again.pressed.connect(func():
 		_end_modal.visible = false
@@ -1933,7 +2173,7 @@ func _build_pause_and_end_modals() -> void:
 	ev.add_child(_btn_play_again)
 
 	_btn_end_menu = Button.new()
-	_btn_end_menu.custom_minimum_size = Vector2(0, 44)
+	_btn_end_menu.custom_minimum_size = Vector2(0, 50)
 	_style_button(_btn_end_menu, false, false)
 	_btn_end_menu.pressed.connect(func():
 		_end_modal.visible = false
@@ -1941,6 +2181,20 @@ func _build_pause_and_end_modals() -> void:
 		return_to_menu_requested.emit()
 	)
 	ev.add_child(_btn_end_menu)
+
+
+func _reset_chase_panic_fx() -> void:
+	_chase_intensity = 0.0
+	_chase_prox = 0.0
+	_chase_pulse_t = 0.0
+	if _chase_panic_overlay != null:
+		_chase_panic_overlay.visible = false
+	if _chase_vignette != null:
+		_chase_vignette.modulate.a = 0.0
+	if _chase_interference != null:
+		_chase_interference.visible = false
+	if _acoustic_scope != null:
+		_acoustic_scope.chase_flare = 0.0
 
 
 func show_main_menu() -> void:
@@ -1953,6 +2207,12 @@ func show_main_menu() -> void:
 	_black_curtain.visible = false
 	_jumpscare_flash_timer = 0.0
 	_jumpscare_overlay.visible = false
+	_wakeup_timer = 0.0
+	_wakeup_overlay.visible = false
+	_blood_vig_alpha = 0.0
+	_blood_vignette.modulate.a = 0.0
+	_blood_vignette.visible = false
+	_reset_chase_panic_fx()
 	_tut_active = false
 	_tut_step = 0
 	_tut_card.visible = false
@@ -1969,10 +2229,17 @@ func show_gameplay_hud() -> void:
 	_pause_modal.visible = false
 	_end_modal.visible = false
 	_modal_scrim.visible = false
+	_blood_vig_alpha = 0.0
+	_blood_vignette.modulate.a = 0.0
+	_blood_vignette.visible = false
+	_reset_chase_panic_fx()
+	_wakeup_timer = 0.0
+	_wakeup_overlay.visible = false
 	_dossier_pinned = false
 	_dossier_peek_timer = 4.0
 	_dossier_card.visible = true
 	_style_button(_btn_dossier, false, false)
+	_btn_dossier.add_theme_font_size_override("font_size", 16)
 	_update_sector_label()
 	if DisplayServer.get_name() != "headless" and OS.get_name() != "Android":
 		Input.set_mouse_mode(Input.MOUSE_MODE_CAPTURED)
@@ -2011,8 +2278,10 @@ func show_cage_curtain(visible_flag: bool) -> void:
 	if visible_flag:
 		_jumpscare_flash_timer = 0.0
 		_jumpscare_overlay.visible = false
+		_reset_chase_panic_fx()
 		_curtain_title.text = Loc.t("CAGE_TRANSITION_TITLE")
-		_curtain_sub.text = Loc.t("CAGE_TRANSITION_SUB")
+		_curtain_sub.text = ""
+		_curtain_sub.visible = false
 		_tween_pop_in(_black_curtain, 1.0, 0.86, 0.28)
 
 
@@ -2023,6 +2292,79 @@ func _process(delta: float) -> void:
 			_jumpscare_overlay.visible = false
 		else:
 			_jumpscare_overlay.queue_redraw()
+
+	if _wakeup_timer > 0.0:
+		_wakeup_timer = maxf(0.0, _wakeup_timer - delta)
+		if _wakeup_timer <= 0.0:
+			_wakeup_overlay.visible = false
+		else:
+			_wakeup_overlay.queue_redraw()
+
+	if _tap_ripple_timer > 0.0:
+		_tap_ripple_timer = maxf(0.0, _tap_ripple_timer - delta)
+		if _tap_ripple_timer <= 0.0:
+			_tap_ripple_ctrl.visible = false
+		else:
+			_tap_ripple_ctrl.queue_redraw()
+
+
+func _spawn_tap_ripple(pos: Vector2) -> void:
+	if _tap_ripple_ctrl == null or _get_reduce_motion():
+		return
+	_tap_ripple_pos = pos
+	_tap_ripple_timer = 0.28
+	_tap_ripple_ctrl.visible = true
+	_tap_ripple_ctrl.queue_redraw()
+
+
+func play_cage_wakeup_effect(duration: float = 2.5) -> void:
+	if DisplayServer.get_name() == "headless":
+		_wakeup_timer = 0.0
+		if _wakeup_overlay != null:
+			_wakeup_overlay.visible = false
+		return
+	_wakeup_duration = maxf(0.2, duration)
+	_wakeup_timer = _wakeup_duration
+	if _wakeup_overlay != null:
+		_wakeup_overlay.visible = true
+		_wakeup_overlay.queue_redraw()
+
+
+func _draw_wakeup_overlay() -> void:
+	if _wakeup_timer <= 0.0:
+		return
+	var sz := _wakeup_overlay.size
+	if sz.x < 8.0 or sz.y < 8.0:
+		return
+	var prog := clampf(1.0 - (_wakeup_timer / _wakeup_duration), 0.0, 1.0)
+	var rm := _get_reduce_motion()
+	# Smooth ease-out clearing + subtle mid-blink dip unless reduce_motion
+	var open_amt := 1.0 - pow(1.0 - prog, 1.8)
+	if not rm and prog > 0.20 and prog < 0.44:
+		var blink_phase := (prog - 0.20) / 0.24
+		open_amt *= (1.0 - 0.55 * sin(blink_phase * PI))
+
+	var haze_a := clampf((1.0 - open_amt) * 0.82, 0.0, 0.90)
+	# Murky dark-teal/ink groggy haze
+	_wakeup_overlay.draw_rect(Rect2(Vector2.ZERO, sz), Color(0.035, 0.048, 0.045, haze_a), true)
+
+	# Soft multi-band eyelid curtain & peripheral blur darkness
+	var lid_ratio := clampf(0.52 * (1.0 - open_amt), 0.0, 0.52)
+	if lid_ratio > 0.01:
+		var lid_h := sz.y * lid_ratio
+		for b_i in range(4):
+			var frac := float(b_i + 1) / 4.0
+			var band_h := lid_h * (1.35 - frac * 0.25)
+			var band_a := clampf((1.0 - open_amt) * (0.28 + 0.18 * frac), 0.0, 0.92)
+			var band_col := Color(COL_INK.r, COL_INK.g, COL_INK.b, band_a)
+			_wakeup_overlay.draw_rect(Rect2(0, 0, sz.x, minf(sz.y * 0.55, band_h)), band_col, true)
+			_wakeup_overlay.draw_rect(Rect2(0, maxf(sz.y * 0.45, sz.y - band_h), sz.x, minf(sz.y * 0.55, band_h)), band_col, true)
+
+	var side_w := sz.x * clampf(0.18 * (1.0 - prog), 0.0, 0.22)
+	if side_w > 1.0:
+		var side_col := Color(COL_INK.r, COL_INK.g, COL_INK.b, clampf((1.0 - prog) * 0.65, 0.0, 0.8))
+		_wakeup_overlay.draw_rect(Rect2(0, 0, side_w, sz.y), side_col, true)
+		_wakeup_overlay.draw_rect(Rect2(sz.x - side_w, 0, side_w, sz.y), side_col, true)
 
 
 func play_jumpscare_flash(duration: float = 0.85) -> void:
@@ -2053,12 +2395,10 @@ func _draw_jumpscare_overlay() -> void:
 		_jumpscare_overlay.draw_rect(Rect2(sz.x - border_t, border_t, border_t, sz.y - border_t * 2.0), vig, true)
 		return
 
-	# High-contrast horror strobe + split dark vignette + crisp scanline/chromatic flicker
 	var strobe_wave := 0.5 + 0.5 * sin(norm_t * PI * 14.0)
 	var flash_a := (0.42 * strobe_wave + 0.16) * fade
 	_jumpscare_overlay.draw_rect(Rect2(Vector2.ZERO, sz), Color(COL_SIGNAL.r, COL_SIGNAL.g, COL_SIGNAL.b, flash_a), true)
 
-	# Split dark frame vignette
 	var vig_h := sz.y * 0.14
 	var vig_w := sz.x * 0.09
 	var vig_col := Color(COL_INK.r, COL_INK.g, COL_INK.b, 0.86 * fade)
@@ -2067,7 +2407,6 @@ func _draw_jumpscare_overlay() -> void:
 	_jumpscare_overlay.draw_rect(Rect2(0, vig_h, vig_w, sz.y - vig_h * 2.0), vig_col, true)
 	_jumpscare_overlay.draw_rect(Rect2(sz.x - vig_w, vig_h, vig_w, sz.y - vig_h * 2.0), vig_col, true)
 
-	# Crisp scanline & chromatic tear bars
 	var phase := int(floor(norm_t * 26.0))
 	for i in range(10):
 		var y_frac := fmod(float((i * 37 + phase * 19) % 97) / 97.0, 1.0)
@@ -2162,7 +2501,7 @@ func show_end_screen(victory: bool, elapsed_sec: float) -> void:
 func update_objectives(planks_done: bool, cable_done: bool, power_done: bool, padlock_done: bool) -> void:
 	var prev_count := _seals_done_count
 	_seals_done_count = int(planks_done) + int(cable_done) + int(power_done) + int(padlock_done)
-	_btn_dossier.text = "  %s  [TAB]" % (Loc.t("DOSSIER_BTN") % _seals_done_count)
+	_btn_dossier.text = "  %s" % (Loc.t("DOSSIER_BTN") % _seals_done_count)
 
 	if _seals_done_count >= 4:
 		_obj_header_lbl.text = Loc.t("OBJ_OPEN_EXIT")
@@ -2206,7 +2545,6 @@ func set_aim_prompt(text: String) -> void:
 		_reticle_active = false
 	else:
 		_prompt_lbl.text = text
-		_prompt_key_lbl.text = "TAP" if _is_touch_device else "E"
 		_prompt_box.visible = true
 		_reticle_active = true
 
@@ -2233,7 +2571,7 @@ func refresh_inventory_bar() -> void:
 		btn.add_theme_stylebox_override("normal", _make_box(bg, brd, 2, 4, 4, 1))
 		btn.add_theme_stylebox_override("hover", _make_box(COL_PANEL_HI, COL_SODIUM if active else COL_PAPER_DIM, 2, 4, 4, 1))
 		btn.add_theme_stylebox_override("pressed", _make_box(COL_PANEL_HI, COL_SODIUM, 2, 4, 4, 1))
-		_attach_corner_ticks(btn, COL_SODIUM if active else Color(0, 0, 0, 0), 7.0, 1.0)
+		_attach_corner_ticks(btn, COL_SODIUM if active else Color(0, 0, 0, 0), 8.0, 1.0)
 		_slot_icons[i].texture = AssetLibrary.get_item_icon(item_id) if not item_id.is_empty() else null
 		if i < _slot_nums.size():
 			var ncol := COL_SODIUM if active else (COL_PAPER_DIM if not item_id.is_empty() else COL_PAPER_MUTE)
@@ -2247,6 +2585,9 @@ func refresh_inventory_bar() -> void:
 		_held_item_lbl.text = Loc.t("ITEM_code_note") % c
 	else:
 		_held_item_lbl.text = Loc.t("ITEM_" + eq)
+
+	if _btn_drop != null:
+		_btn_drop.visible = _touch_controls_visible and not eq.is_empty()
 
 	if _dossier_code_lbl != null and not player.known_safe_code.is_empty():
 		_dossier_code_lbl.text = Loc.t("SAFE_KNOWN_CODE") % player.known_safe_code
@@ -2289,7 +2630,7 @@ func _refresh_diff_buttons() -> void:
 			var sb := btn.get_theme_stylebox(st_name)
 			if sb is StyleBoxFlat:
 				(sb as StyleBoxFlat).content_margin_left = 36
-		btn.add_theme_font_size_override("font_size", 14)
+		btn.add_theme_font_size_override("font_size", 15)
 		btn.queue_redraw()
 
 
@@ -2309,28 +2650,100 @@ func _refresh_record_readout() -> void:
 		_record_lbl.add_theme_color_override("font_color", COL_PHOSPHOR)
 		_set_corner_tick_color(_record_plate, COL_PHOSPHOR)
 	else:
-		_record_lbl.text = "ДОПУСК: НИИ-07 · ПОБЕГОВ: 0" if Loc.current_lang == "ru" else "CLEARANCE: NII-07 · ESCAPES: 0"
+		_record_lbl.text = "НИИ-07 · ПОБЕГОВ: 0" if Loc.current_lang == "ru" else "NII-07 · ESCAPES: 0"
 		_record_lbl.add_theme_color_override("font_color", COL_SODIUM)
 		_set_corner_tick_color(_record_plate, Color(COL_SODIUM, 0.65))
+
+
+func _normalize_relay_url(raw: String) -> String:
+	var trimmed := raw.strip_edges()
+	var lower := trimmed.to_lower()
+	if lower.begins_with("https://"):
+		return "wss://" + trimmed.substr(8)
+	if lower.begins_with("http://"):
+		return "ws://" + trimmed.substr(7)
+	return trimmed
+
+
+func _apply_normalized_relay_url(raw: String, update_field: bool) -> void:
+	var norm := _normalize_relay_url(raw)
+	if update_field and _relay_input != null and _relay_input.text != norm:
+		_relay_input.text = norm
+		_relay_input.caret_column = norm.length()
+	var low := norm.to_lower()
+	if low.begins_with("ws://") or low.begins_with("wss://"):
+		SaveState.relay_url = norm
+		SaveState.save_profile()
+
+
+func _on_relay_error(err_code: String, detail: String = "") -> void:
+	var low := err_code.to_lower()
+	if low.contains("not_found") or low.contains("not found") or low == "missing":
+		_coop_error_msg = Loc.t("COOP_ERR_NOT_FOUND")
+	elif low.contains("full"):
+		_coop_error_msg = Loc.t("COOP_ERR_FULL")
+	elif low.contains("unreachable") or low.contains("timeout") or low.contains("connect") or low.contains("closed"):
+		_coop_error_msg = Loc.t("COOP_ERR_UNREACHABLE")
+	elif not detail.is_empty():
+		_coop_error_msg = Loc.t("COOP_ERR_GENERIC") % detail
+	else:
+		_coop_error_msg = Loc.t("COOP_ERR_GENERIC") % err_code
+	_coop_conn_status = "error"
+	_refresh_coop_ui()
+
+
+func _on_relay_connection_status(status: String) -> void:
+	var low := status.to_lower()
+	if low == "connected" or low == "open":
+		_coop_error_msg = ""
+		_coop_conn_status = "connected"
+	elif low == "connecting":
+		_coop_error_msg = ""
+		_coop_conn_status = "connecting"
+	elif low == "error" or low == "failed" or low == "unreachable":
+		_coop_conn_status = "error"
+		if _coop_error_msg.is_empty():
+			_coop_error_msg = Loc.t("COOP_ERR_UNREACHABLE")
+	else:
+		_coop_conn_status = ""
+	_refresh_coop_ui()
 
 
 func _refresh_coop_ui() -> void:
 	if _coop_status_lbl == null:
 		return
-	if NetRelay.room_code.is_empty():
-		_coop_status_lbl.text = Loc.t("COOP_ROOM_STATUS_NONE")
-		_coop_status_lbl.add_theme_color_override("font_color", COL_PAPER_DIM)
-		_btn_launch_coop.disabled = true
-		_btn_launch_coop.text = Loc.t("COOP_START_MATCH")
-	else:
+	if not NetRelay.room_code.is_empty():
 		var role := Loc.t("ROLE_HOST") if NetRelay.is_host else Loc.t("ROLE_CLIENT")
 		_coop_status_lbl.text = Loc.t("COOP_ROOM_STATUS_ACTIVE") % [NetRelay.room_code, NetRelay.get_squad_size(), role]
 		_coop_status_lbl.add_theme_color_override("font_color", COL_PHOSPHOR)
 		_btn_launch_coop.disabled = not NetRelay.is_host
 		_btn_launch_coop.text = Loc.t("COOP_START_MATCH") if NetRelay.is_host else Loc.t("COOP_WAITING_HOST")
+	elif not _coop_error_msg.is_empty():
+		_coop_status_lbl.text = _coop_error_msg
+		_coop_status_lbl.add_theme_color_override("font_color", COL_SIGNAL)
+		_btn_launch_coop.disabled = true
+		_btn_launch_coop.text = Loc.t("COOP_START_MATCH")
+	elif _coop_conn_status == "connecting":
+		_coop_status_lbl.text = Loc.t("COOP_STATUS_CONNECTING")
+		_coop_status_lbl.add_theme_color_override("font_color", COL_SODIUM)
+		_btn_launch_coop.disabled = true
+		_btn_launch_coop.text = Loc.t("COOP_START_MATCH")
+	elif _coop_conn_status == "connected" or NetRelay.connected_to_relay:
+		_coop_status_lbl.text = Loc.t("COOP_STATUS_CONNECTED")
+		_coop_status_lbl.add_theme_color_override("font_color", COL_PHOSPHOR)
+		_btn_launch_coop.disabled = true
+		_btn_launch_coop.text = Loc.t("COOP_START_MATCH")
+	else:
+		_coop_status_lbl.text = Loc.t("COOP_ROOM_STATUS_NONE")
+		_coop_status_lbl.add_theme_color_override("font_color", COL_PAPER_DIM)
+		_btn_launch_coop.disabled = true
+		_btn_launch_coop.text = Loc.t("COOP_START_MATCH")
 
 
 func _on_open_lobbies(lobbies: Array) -> void:
+	_coop_error_msg = ""
+	if NetRelay.connected_to_relay:
+		_coop_conn_status = "connected"
 	for ch in _public_rooms_box.get_children():
 		ch.queue_free()
 	for entry in lobbies:
@@ -2342,9 +2755,10 @@ func _on_open_lobbies(lobbies: Array) -> void:
 			rb.text = "%s  ·  %s (%d/4)" % [code, host_n, cnt]
 			_style_button(rb, false, false)
 			rb.add_theme_font_override("font", _font_mono)
-			rb.add_theme_font_size_override("font_size", 13)
+			rb.add_theme_font_size_override("font_size", 15)
 			rb.pressed.connect(func(): NetRelay.join_room(code))
 			_public_rooms_box.add_child(rb)
+	_refresh_coop_ui()
 
 
 func refresh_texts() -> void:
@@ -2356,7 +2770,6 @@ func refresh_texts() -> void:
 	_btn_nav_coop.text = Loc.t("MENU_PLAY_COOP")
 	_btn_nav_settings.text = Loc.t("MENU_SETTINGS")
 	_btn_nav_how.text = Loc.t("MENU_HOW_TO_PLAY")
-	_btn_lang_quick.text = "RU / EN"
 
 	_diff_title_lbl.text = Loc.t("DIFF_TITLE")
 	_btn_begin_solo.text = Loc.t("START_GAME_BTN")
@@ -2379,31 +2792,32 @@ func refresh_texts() -> void:
 	_val_vol_lbl.text = "%d%%" % int(round(SaveState.master_volume * 100.0))
 	var mic_keys := ["MIC_AUTO", "MIC_PTT", "MIC_OFF"]
 	_btn_mic_mode.text = "%s: %s" % [Loc.t("SET_MIC"), Loc.t(mic_keys[SaveState.mic_mode])]
+	_btn_mic_mode.add_theme_font_size_override("font_size", 16)
 
 	var gyro_on := SaveState.gyro_enabled
 	_btn_gyro.text = "%s: %s" % [Loc.t("SET_GYRO"), Loc.t("ON" if gyro_on else "OFF")]
 	_style_button(_btn_gyro, false, gyro_on)
-	_btn_gyro.add_theme_font_size_override("font_size", 13)
+	_btn_gyro.add_theme_font_size_override("font_size", 15)
 
 	var hap_on := SaveState.haptics_enabled
 	_btn_haptics.text = "%s: %s" % [_tr_or("SET_HAPTICS", "Вибрация", "Haptics"), Loc.t("ON" if hap_on else "OFF")]
 	_style_button(_btn_haptics, false, hap_on)
-	_btn_haptics.add_theme_font_size_override("font_size", 13)
+	_btn_haptics.add_theme_font_size_override("font_size", 15)
 
 	var rm_on := _get_reduce_motion()
 	_btn_reduce_motion.text = "%s: %s" % [_tr_or("SET_REDUCE_MOTION", "Меньше движения", "Reduce motion"), Loc.t("ON" if rm_on else "OFF")]
 	_style_button(_btn_reduce_motion, false, rm_on)
-	_btn_reduce_motion.add_theme_font_size_override("font_size", 13)
+	_btn_reduce_motion.add_theme_font_size_override("font_size", 15)
 
 	_btn_lang.text = Loc.t("SET_LANG")
-	_btn_lang.add_theme_font_size_override("font_size", 13)
+	_btn_lang.add_theme_font_size_override("font_size", 15)
 
 	if _btn_replay_tutorial != null:
 		var tut_armed := not SaveState.tutorial_completed
 		var tut_lbl := Loc.t("SET_REPLAY_TUTORIAL")
 		_btn_replay_tutorial.text = ("%s: %s" % [tut_lbl, Loc.t("ON")]) if tut_armed else tut_lbl
 		_style_button(_btn_replay_tutorial, false, tut_armed)
-		_btn_replay_tutorial.add_theme_font_size_override("font_size", 13)
+		_btn_replay_tutorial.add_theme_font_size_override("font_size", 15)
 
 	_refresh_tutorial_card()
 
@@ -2414,11 +2828,11 @@ func refresh_texts() -> void:
 		"KEY_SPRINT": _tr_or("KEY_SPRINT", "Бег", "Sprint"),
 		"KEY_INTERACT": _tr_or("KEY_INTERACT", "Действие", "Interact"),
 		"KEY_LIGHT": _tr_or("KEY_LIGHT", "Фонарь", "Flashlight"),
-		"KEY_CELL": _tr_or("KEY_CELL", "Смена батареи", "Quick cell"),
+		"KEY_CELL": _tr_or("KEY_CELL", "Смена батареи", "Swap battery"),
 		"KEY_CROUCH": _tr_or("KEY_CROUCH", "Присед", "Crouch"),
 		"KEY_BREATH": _tr_or("KEY_BREATH", "Задержать дыхание", "Hold breath"),
-		"KEY_THROW": _tr_or("KEY_THROW", "Бросить / выложить", "Throw / drop"),
-		"KEY_USE": _tr_or("KEY_USE", "Использовать предмет", "Use held item"),
+		"KEY_THROW": _tr_or("KEY_THROW", "Бросить", "Throw / drop"),
+		"KEY_USE": _tr_or("KEY_USE", "Применить", "Use item"),
 		"KEY_DOSSIER": _tr_or("KEY_DOSSIER", "Досье", "Dossier"),
 	}
 	for row_d in _manual_key_rows:
@@ -2432,19 +2846,14 @@ func refresh_texts() -> void:
 	_btn_to_menu.text = Loc.t("PAUSE_MAIN_MENU")
 	_btn_play_again.text = Loc.t("PAUSE_RESTART")
 	_btn_end_menu.text = Loc.t("PAUSE_MAIN_MENU")
-	_btn_dossier.text = "  %s  [TAB]" % (Loc.t("DOSSIER_BTN") % _seals_done_count)
-	_legend_lbl.text = _tr_or(
-		"CONTROL_HINT_BAR",
-		"[E] Действие · [ПКМ] Применить/Бросок · [R] Батарея · [F] Фонарь · [C] Присед · [ПРОБЕЛ] Дыхание",
-		"[E] Interact · [RMB] Use/Throw · [R] Battery · [F] Light · [C] Crouch · [SPACE] Breath"
-	)
+	_btn_dossier.text = "  %s" % (Loc.t("DOSSIER_BTN") % _seals_done_count)
 	_update_sector_label()
 	refresh_inventory_bar()
 
 
 func update_runtime_hud(
 	delta: float,
-	difficulty: int,
+	_difficulty: int,
 	stalker_state: String,
 	stalker_dist: float,
 	downed_ally_name: String = ""
@@ -2468,55 +2877,80 @@ func update_runtime_hud(
 	if minimap != null:
 		minimap.tick_minimap(delta)
 
-	if not NetRelay.room_code.is_empty():
-		_mode_tag_lbl.text = Loc.t("RADAR_COOP") % NetRelay.room_code
-		_mode_tag_lbl.add_theme_color_override("font_color", COL_PHOSPHOR)
-	elif difficulty == SaveState.DIFF_PRACTICE:
-		_mode_tag_lbl.text = Loc.t("RADAR_RECON")
-		_mode_tag_lbl.add_theme_color_override("font_color", COL_SODIUM)
+	var in_chase := (stalker_state == MonsterDirector.STATE_CHASE)
+	if in_chase:
+		_chase_intensity = move_toward(_chase_intensity, 1.0, delta * 2.5)
+		var target_prox := clampf(1.0 - (stalker_dist / 16.0), 0.0, 1.0)
+		_chase_prox = target_prox if reduce_motion else move_toward(_chase_prox, target_prox, delta * 3.2)
 	else:
-		_mode_tag_lbl.text = ""
+		_chase_intensity = move_toward(_chase_intensity, 0.0, delta * 1.0)
+		_chase_prox = move_toward(_chase_prox, 0.0, delta * 1.0)
+
+	if _chase_intensity > 0.005:
+		_chase_panic_overlay.visible = true
+		if reduce_motion:
+			_chase_vignette.modulate = Color(1.0, 1.0, 1.0, _chase_intensity * lerpf(0.55, 0.88, _chase_prox))
+		else:
+			_chase_pulse_t += delta
+			var vig_pulse := 0.90 + 0.10 * sin(_chase_pulse_t * 8.5)
+			var vig_a := _chase_intensity * lerpf(0.56, 0.94, _chase_prox) * vig_pulse
+			_chase_vignette.modulate = Color(1.0, 1.0, 1.0, clampf(vig_a, 0.0, 0.96))
+		_chase_interference.update_state(_chase_intensity, _chase_prox, _chase_pulse_t, reduce_motion)
+	else:
+		_chase_panic_overlay.visible = false
+		_chase_vignette.modulate.a = 0.0
+		_chase_interference.visible = false
+
+	var chase_flare := _chase_intensity * (1.0 if reduce_motion else (0.76 + 0.24 * absf(sin(_chase_pulse_t * 7.5))))
+	if _acoustic_scope != null:
+		_acoustic_scope.chase_flare = chase_flare
+		_acoustic_scope.tick(delta, player != null and player.is_holding_breath)
 
 	if player != null:
-		_battery_val = clampf(player.battery_charge, 0.0, 1.0)
-		_battery_meter.queue_redraw()
-		_battery_lbl.text = "%d%%" % int(round(_battery_val * 100.0))
-		if _battery_val <= 0.28:
-			_battery_lbl.add_theme_color_override("font_color", COL_SIGNAL)
-			if player.has_item_in_inventory("battery") >= 0:
-				_battery_hint_lbl.text = "[R]"
-				_battery_hint_lbl.add_theme_color_override("font_color", COL_SODIUM)
-			else:
-				_battery_hint_lbl.text = "[F]"
-				_battery_hint_lbl.add_theme_color_override("font_color", COL_SIGNAL)
-		elif _battery_val <= 0.45:
-			_battery_lbl.add_theme_color_override("font_color", COL_SODIUM)
-			_battery_hint_lbl.text = ""
-		else:
-			_battery_lbl.add_theme_color_override("font_color", COL_PAPER_DIM)
-			_battery_hint_lbl.text = ""
-
-		if player.is_holding_breath:
-			_vitals_lbl.text = Loc.t("BREATH_HOLDING")
-			_vitals_lbl.add_theme_color_override("font_color", COL_COLD)
-		elif player.is_caged:
-			_vitals_lbl.text = Loc.t("VITALS_CAGED")
-			_vitals_lbl.add_theme_color_override("font_color", COL_SODIUM)
-		elif player.wounds > 0 or player.is_downed:
-			_vitals_lbl.text = Loc.t("VITALS_WOUNDED")
-			_vitals_lbl.add_theme_color_override("font_color", COL_SIGNAL)
-		elif player.is_hiding_in_locker or player.is_under_desk:
-			_vitals_lbl.text = _tr_or("POSTURE_HIDDEN", "В укрытии", "Hidden")
-			_vitals_lbl.add_theme_color_override("font_color", COL_COLD)
-		elif player.is_crouching:
-			_vitals_lbl.text = _tr_or("POSTURE_CROUCH", "Присед", "Crouch")
-			_vitals_lbl.add_theme_color_override("font_color", COL_PHOSPHOR)
-		else:
-			_vitals_lbl.text = Loc.t("VITALS_HEALTHY")
-			_vitals_lbl.add_theme_color_override("font_color", COL_PAPER_DIM)
+		var nl_bar := AcousticBus.current_noise_level
+		var bar_tick_col := COL_COLD if player.is_holding_breath else (
+			COL_SIGNAL if nl_bar >= 0.45 else (
+				COL_SODIUM if nl_bar >= 0.18 else COL_RULE_STRONG
+			)
+		)
+		_top_bar_style.border_color = COL_RULE_STRONG.lerp(COL_SIGNAL, chase_flare)
+		_top_bar_style.bg_color = COL_PANEL.lerp(Color(0.24, 0.05, 0.04, 0.95), chase_flare * 0.45)
+		_top_bar_style.set_border_width_all(2 if chase_flare > 0.22 else 1)
+		_set_corner_tick_color(_top_status_bar, bar_tick_col.lerp(COL_SIGNAL, chase_flare))
 
 		_breath_bar.visible = (player.is_holding_breath or player.breath_stamina < 0.99)
 		_breath_bar.value = player.breath_stamina * 100.0
+
+		# Diegetic blood-edge vignette when wounded or downed
+		var is_injured := (player.wounds > 0 or player.is_downed)
+		if is_injured:
+			_blood_vignette.visible = true
+			_blood_vig_alpha = move_toward(_blood_vig_alpha, 1.0, delta * 2.5)
+			if reduce_motion:
+				_blood_vignette.modulate.a = _blood_vig_alpha * (0.72 if player.is_downed else 0.55)
+			else:
+				_blood_pulse_t += delta * (4.6 if player.is_downed else 2.8)
+				var hb := pow(maxf(0.0, sin(_blood_pulse_t)), 4.0) * 0.24
+				var base_a := 0.68 if player.is_downed else 0.58
+				_blood_vignette.modulate.a = _blood_vig_alpha * clampf(base_a + hb, 0.44, 0.92)
+		else:
+			_blood_vig_alpha = move_toward(_blood_vig_alpha, 0.0, delta * 3.0)
+			if _blood_vig_alpha <= 0.005:
+				_blood_vignette.modulate.a = 0.0
+				_blood_vignette.visible = false
+			else:
+				_blood_vignette.modulate.a = _blood_vig_alpha * 0.55
+
+		# Update touch action button visual states & drop visibility
+		if _touch_controls_visible:
+			var low_bat := (player.battery_charge <= 0.28)
+			var flash_col := COL_SIGNAL if low_bat else COL_SODIUM
+			var flash_idle_brd := Color(COL_SIGNAL, 0.80) if low_bat else COL_RULE_STRONG
+			_apply_touch_btn_highlight(_btn_flashlight, player.flashlight_on, flash_col, flash_idle_brd)
+			_apply_touch_btn_highlight(_btn_crouch, player.is_crouching, COL_SODIUM)
+			_apply_touch_btn_highlight(_btn_breath, player.is_holding_breath, COL_COLD)
+			if _btn_drop != null:
+				_btn_drop.visible = not player.get_equipped_item().is_empty()
 
 		# Precision Reticle Update
 		var crouch_or_hide := player.is_crouching or player.is_under_desk or player.is_hiding_in_locker or player.is_holding_breath
@@ -2543,7 +2977,7 @@ func update_runtime_hud(
 			status_col = COL_SIGNAL
 			border_col = COL_SIGNAL
 			urgent = true
-		elif stalker_state == MonsterDirector.STATE_CHASE and stalker_dist < 22.0:
+		elif stalker_state == MonsterDirector.STATE_CHASE:
 			status_txt = Loc.t("STATUS_CHASE")
 			status_col = COL_SIGNAL
 			border_col = COL_SIGNAL
@@ -2576,13 +3010,15 @@ func update_runtime_hud(
 			_stalker_alert_lbl.add_theme_color_override("font_color", status_col)
 			_status_is_urgent = urgent
 			if urgent and not reduce_motion:
-				_status_pulse_t += delta * 6.0
-				var pulse_a := 0.55 + 0.40 * absf(sin(_status_pulse_t))
+				_status_pulse_t += delta * (8.0 if in_chase else 6.0)
+				var pulse_a := (0.72 + 0.28 * absf(sin(_status_pulse_t))) if in_chase else (0.55 + 0.40 * absf(sin(_status_pulse_t)))
 				border_col = Color(border_col, pulse_a)
-			if border_col != _status_accent or (urgent and not reduce_motion):
-				_status_accent = border_col
-				_status_pill.add_theme_stylebox_override("panel", _make_box(COL_PANEL, border_col, 2, 14, 7, 1))
-				_set_corner_tick_color(_status_pill, border_col)
+			var pill_bg := COL_PANEL.lerp(Color(0.28, 0.05, 0.04, 0.96), 0.45 * chase_flare) if in_chase else COL_PANEL
+			_status_pill_style.bg_color = pill_bg
+			_status_pill_style.border_color = border_col
+			_status_pill_style.set_border_width_all(2 if in_chase else 1)
+			_status_accent = border_col
+			_set_corner_tick_color(_status_pill, COL_SIGNAL if in_chase else border_col)
 
 	var threat := clampf(1.0 - (stalker_dist / 12.0), 0.0, 1.0)
 	if stalker_state == MonsterDirector.STATE_CHASE:
@@ -2605,7 +3041,7 @@ func _keycode_to_digit(kc: Key) -> String:
 
 
 func _is_point_in_hud_buttons(pt: Vector2) -> bool:
-	for b in [_btn_pause, _btn_dossier, _tut_skip_btn, _tut_next_btn, _btn_sprint, _btn_interact, _btn_breath, _btn_flashlight, _btn_crouch, _btn_drop]:
+	for b in [_btn_pause, _btn_dossier, _tut_skip_btn, _tut_next_btn, _btn_breath, _btn_flashlight, _btn_crouch, _btn_drop]:
 		if b != null and b.visible and b.get_global_rect().has_point(pt):
 			return true
 	for sb in _slot_btns:
@@ -2676,6 +3112,11 @@ func _input(event: InputEvent) -> void:
 	if event is InputEventScreenTouch:
 		var st := event as InputEventScreenTouch
 		if st.pressed:
+			if _prompt_box != null and _prompt_box.visible and _prompt_box.get_global_rect().has_point(st.position):
+				_spawn_tap_ripple(st.position)
+				if player != null:
+					player.trigger_interact()
+				return
 			if _is_point_in_hud_buttons(st.position):
 				return
 			if st.position.x < vp_w * 0.44 and st.position.y > 88.0 and _joy_touch_idx == -1:
@@ -2691,29 +3132,50 @@ func _input(event: InputEvent) -> void:
 				_update_joystick(st.position)
 			elif st.position.x >= vp_w * 0.44 and _look_touch_idx == -1:
 				_look_touch_idx = st.index
+				_look_touch_start_pos = st.position
+				_look_touch_start_time = Time.get_ticks_msec() * 0.001
+				_look_touch_moved = 0.0
 		else:
 			if st.index == _joy_touch_idx:
 				_joy_touch_idx = -1
-				_anchor_box(_joy_base, 0.0, 1.0, 0.0, 1.0, 36.0, -180.0, 180.0, -36.0)
-				_joy_knob.position = Vector2(44, 44)
+				_joy_sprinting = false
+				_anchor_box(_joy_base, 0.0, 1.0, 0.0, 1.0, 32.0, -200.0, 200.0, -32.0)
+				_joy_knob.position = JOY_REST_POS
 				_joy_base.queue_redraw()
 				if player != null:
 					player.touch_move_vec = Vector2.ZERO
+					player.touch_sprinting = false
 			elif st.index == _look_touch_idx:
+				var now := Time.get_ticks_msec() * 0.001
+				var dur := now - _look_touch_start_time
+				if dur < 0.24 and _look_touch_moved < 18.0:
+					if (now - _last_tap_time) <= 0.35 and st.position.distance_to(_last_tap_pos) <= 64.0:
+						_last_tap_time = -10.0
+						_spawn_tap_ripple(st.position)
+						if player != null:
+							player.trigger_interact()
+					else:
+						_last_tap_time = now
+						_last_tap_pos = st.position
 				_look_touch_idx = -1
 	elif event is InputEventScreenDrag:
 		var sd := event as InputEventScreenDrag
 		if sd.index == _joy_touch_idx:
 			_update_joystick(sd.position)
-		elif sd.index == _look_touch_idx and player != null:
-			player.apply_look_delta(sd.relative * 1.45)
+		elif sd.index == _look_touch_idx:
+			_look_touch_moved += sd.relative.length()
+			if player != null:
+				player.apply_look_delta(sd.relative * 1.45)
 
 
 func _update_joystick(touch_pos: Vector2) -> void:
 	var diff := touch_pos - _joy_center
-	var max_r := 52.0
-	if diff.length() > max_r:
-		diff = diff.normalized() * max_r
-	_joy_knob.position = Vector2(44, 44) + diff
+	var ratio := diff.length() / JOY_MAX_R
+	_joy_sprinting = (ratio >= JOY_SPRINT_RATIO)
+	if diff.length() > JOY_MAX_R:
+		diff = diff.normalized() * JOY_MAX_R
+	_joy_knob.position = JOY_REST_POS + diff
+	_joy_base.queue_redraw()
 	if player != null:
-		player.touch_move_vec = diff / max_r
+		player.touch_move_vec = diff / JOY_MAX_R
+		player.touch_sprinting = _joy_sprinting
