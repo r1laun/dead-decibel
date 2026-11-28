@@ -12,7 +12,7 @@ config/name_localized={
 "ru": "МЁРТВЫЙ ДЕЦИБЕЛ"
 }
 config/description="DEAD DECIBEL — 1–4 player co-op & solo 3D acoustic stealth horror in Soviet bio-institute NII-07. Watch your noise, hold your breath, solve locks, and escape Listener-07."
-config/version="4.2.1"
+config/version="4.2.2"
 run/main_scene="res://scenes/main.tscn"
 config/features=PackedStringArray("4.7", "GL Compatibility")
 boot_splash/bg_color=Color(0.031, 0.031, 0.039, 1)
@@ -22,6 +22,7 @@ config/icon="res://assets/icons/app_icon_512.png"
 [audio]
 
 driver/enable_input=true
+driver/enable_input.android=false
 buses/default_bus_layout=""
 
 [autoload]

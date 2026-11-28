@@ -3,9 +3,11 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://b57ngsm8vohub"
-path="res://.godot/imported/item_code_note_dirty_wood.png-e9ead58572ba2443e3c785a9e9f0605d.ctex"
+path.s3tc="res://.godot/imported/item_code_note_dirty_wood.png-e9ead58572ba2443e3c785a9e9f0605d.s3tc.ctex"
+path.etc2="res://.godot/imported/item_code_note_dirty_wood.png-e9ead58572ba2443e3c785a9e9f0605d.etc2.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc", "etc2_astc"],
+"vram_texture": true
 }
 generator_parameters={
 "md5": "2bf02daeb91dff084d3f1f55abcb5719"
@@ -14,11 +16,11 @@ generator_parameters={
 [deps]
 
 source_file="res://assets/models/item_code_note_dirty_wood.png"
-dest_files=["res://.godot/imported/item_code_note_dirty_wood.png-e9ead58572ba2443e3c785a9e9f0605d.ctex"]
+dest_files=["res://.godot/imported/item_code_note_dirty_wood.png-e9ead58572ba2443e3c785a9e9f0605d.s3tc.ctex", "res://.godot/imported/item_code_note_dirty_wood.png-e9ead58572ba2443e3c785a9e9f0605d.etc2.ctex"]
 
 [params]
 
-compress/mode=0
+compress/mode=2
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0

@@ -3,9 +3,11 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://dnpr4chqtoqur"
-path="res://.godot/imported/item_cutters_rusted_metal.png-f8cce7ee10a87d94b9a871ec80669bdf.ctex"
+path.s3tc="res://.godot/imported/item_cutters_rusted_metal.png-f8cce7ee10a87d94b9a871ec80669bdf.s3tc.ctex"
+path.etc2="res://.godot/imported/item_cutters_rusted_metal.png-f8cce7ee10a87d94b9a871ec80669bdf.etc2.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc", "etc2_astc"],
+"vram_texture": true
 }
 generator_parameters={
 "md5": "5bea66507b77c9f1c2eecbdb922c3056"
@@ -14,11 +16,11 @@ generator_parameters={
 [deps]
 
 source_file="res://assets/models/item_cutters_rusted_metal.png"
-dest_files=["res://.godot/imported/item_cutters_rusted_metal.png-f8cce7ee10a87d94b9a871ec80669bdf.ctex"]
+dest_files=["res://.godot/imported/item_cutters_rusted_metal.png-f8cce7ee10a87d94b9a871ec80669bdf.s3tc.ctex", "res://.godot/imported/item_cutters_rusted_metal.png-f8cce7ee10a87d94b9a871ec80669bdf.etc2.ctex"]
 
 [params]
 
-compress/mode=0
+compress/mode=2
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0

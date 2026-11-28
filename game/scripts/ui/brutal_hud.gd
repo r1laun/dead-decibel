@@ -751,8 +751,8 @@ func _tween_pop_in(ctrl: Control, start_scale: float = 0.97, start_alpha: float 
 
 
 func _make_blood_vignette_tex() -> ImageTexture:
-	var w := 256
-	var h := 144
+	var w := 128
+	var h := 72
 	var img := Image.create(w, h, false, Image.FORMAT_RGBA8)
 	for y in range(h):
 		var ny := (float(y) / float(h - 1)) * 2.0 - 1.0
@@ -773,8 +773,8 @@ func _make_blood_vignette_tex() -> ImageTexture:
 
 
 func _make_chase_vignette_tex() -> ImageTexture:
-	var w := 256
-	var h := 144
+	var w := 128
+	var h := 72
 	var img := Image.create(w, h, false, Image.FORMAT_RGBA8)
 	for y in range(h):
 		var ny := (float(y) / float(h - 1)) * 2.0 - 1.0
@@ -1085,6 +1085,11 @@ func _build_main_menu() -> void:
 	_name_input.custom_minimum_size = Vector2(0, 44)
 	_name_input.text_changed.connect(func(nt: String):
 		SaveState.callsign = nt.strip_edges().left(14) if not nt.strip_edges().is_empty() else "SURVIVOR"
+	)
+	_name_input.text_submitted.connect(func(_nt: String):
+		SaveState.save_profile()
+	)
+	_name_input.focus_exited.connect(func():
 		SaveState.save_profile()
 	)
 	col_name.add_child(_name_input)
@@ -2654,7 +2659,8 @@ func _switch_menu_card(which: String) -> void:
 	elif which == "how":
 		active_card = _card_how
 	if active_card != null:
-		_tween_pop_in(active_card, 0.975, 0.90, 0.19)
+		var start_sc := 1.0 if which == "coop" else 0.975
+		_tween_pop_in(active_card, start_sc, 0.90, 0.19)
 
 
 func _refresh_diff_buttons() -> void:
@@ -2711,7 +2717,8 @@ func _apply_normalized_relay_url(raw: String, update_field: bool) -> void:
 	var low := norm.to_lower()
 	if low.begins_with("ws://") or low.begins_with("wss://"):
 		SaveState.relay_url = norm
-		SaveState.save_profile()
+		if update_field:
+			SaveState.save_profile()
 
 
 func _on_relay_error(err_code: String, detail: String = "") -> void:

@@ -68,28 +68,32 @@ func set_menu_music(enabled: bool) -> void:
 
 
 func _ensure_audio_buses() -> void:
+	var use_reverb := (OS.get_name() != "Android")
 	if AudioServer.get_bus_index(&"WorldSFX") == -1:
 		var idx := AudioServer.bus_count
 		AudioServer.add_bus(idx)
 		AudioServer.set_bus_name(idx, &"WorldSFX")
 		AudioServer.set_bus_send(idx, &"Master")
-		var rev := AudioEffectReverb.new()
-		rev.room_size = 0.58
-		rev.damping = 0.48
-		rev.wet = 0.22
-		rev.dry = 0.88
-		AudioServer.add_bus_effect(idx, rev)
+		if use_reverb:
+			var rev := AudioEffectReverb.new()
+			rev.room_size = 0.58
+			rev.damping = 0.48
+			rev.wet = 0.22
+			rev.dry = 0.88
+			AudioServer.add_bus_effect(idx, rev)
 
 	if AudioServer.get_bus_index(&"Voice3D") == -1:
 		var idx := AudioServer.bus_count
 		AudioServer.add_bus(idx)
 		AudioServer.set_bus_name(idx, &"Voice3D")
 		AudioServer.set_bus_send(idx, &"Master")
-		var rev := AudioEffectReverb.new()
-		rev.room_size = 0.65
-		rev.damping = 0.40
-		rev.wet = 0.26
-		AudioServer.add_bus_effect(idx, rev)
+		if use_reverb:
+			var rev := AudioEffectReverb.new()
+			rev.room_size = 0.65
+			rev.damping = 0.40
+			rev.wet = 0.26
+			rev.dry = 0.86
+			AudioServer.add_bus_effect(idx, rev)
 
 
 func _make_wav(samples: PackedFloat32Array, loop: bool = false) -> AudioStreamWAV:
@@ -751,9 +755,6 @@ func update_tension_heartbeat(delta: float, monster_dist: float, in_chase: bool)
 	if _heartbeat_timer <= 0.0:
 		_heartbeat_timer = interval
 		play_2d("heartbeat", lerpf(-14.0, -2.0, closeness), lerpf(0.95, 1.15, closeness))
-		if SaveState.haptics_enabled and OS.get_name() == "Android" and closeness > 0.55 and _haptic_cd <= 0.0:
-			_haptic_cd = 0.60
-			Input.vibrate_handheld(maxi(25, int(35.0 * closeness)))
 
 
 func update_chase_music(delta: float, in_chase: bool, monster_dist: float) -> void:

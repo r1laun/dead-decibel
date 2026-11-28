@@ -3,9 +3,11 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://btuxy3pel4smi"
-path="res://.godot/imported/prop_pa_intercom_rusted_metal.png-53e28dc12cf7bf9b9729e3e7872355c9.ctex"
+path.s3tc="res://.godot/imported/prop_pa_intercom_rusted_metal.png-53e28dc12cf7bf9b9729e3e7872355c9.s3tc.ctex"
+path.etc2="res://.godot/imported/prop_pa_intercom_rusted_metal.png-53e28dc12cf7bf9b9729e3e7872355c9.etc2.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc", "etc2_astc"],
+"vram_texture": true
 }
 generator_parameters={
 "md5": "5bea66507b77c9f1c2eecbdb922c3056"
@@ -14,11 +16,11 @@ generator_parameters={
 [deps]
 
 source_file="res://assets/models/prop_pa_intercom_rusted_metal.png"
-dest_files=["res://.godot/imported/prop_pa_intercom_rusted_metal.png-53e28dc12cf7bf9b9729e3e7872355c9.ctex"]
+dest_files=["res://.godot/imported/prop_pa_intercom_rusted_metal.png-53e28dc12cf7bf9b9729e3e7872355c9.s3tc.ctex", "res://.godot/imported/prop_pa_intercom_rusted_metal.png-53e28dc12cf7bf9b9729e3e7872355c9.etc2.ctex"]
 
 [params]
 
-compress/mode=0
+compress/mode=2
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0

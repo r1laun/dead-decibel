@@ -3,9 +3,11 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://c1fb67bwu6th2"
-path="res://.godot/imported/survivor_hazmat_rusted_metal_n.png-1bf3d25824db17390347114a3fbe453c.ctex"
+path.s3tc="res://.godot/imported/survivor_hazmat_rusted_metal_n.png-1bf3d25824db17390347114a3fbe453c.s3tc.ctex"
+path.etc2="res://.godot/imported/survivor_hazmat_rusted_metal_n.png-1bf3d25824db17390347114a3fbe453c.etc2.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc", "etc2_astc"],
+"vram_texture": true
 }
 generator_parameters={
 "md5": "50271a7b686988b0a1c2e2069cb18c9f"
@@ -14,11 +16,11 @@ generator_parameters={
 [deps]
 
 source_file="res://assets/models/survivor_hazmat_rusted_metal_n.png"
-dest_files=["res://.godot/imported/survivor_hazmat_rusted_metal_n.png-1bf3d25824db17390347114a3fbe453c.ctex"]
+dest_files=["res://.godot/imported/survivor_hazmat_rusted_metal_n.png-1bf3d25824db17390347114a3fbe453c.s3tc.ctex", "res://.godot/imported/survivor_hazmat_rusted_metal_n.png-1bf3d25824db17390347114a3fbe453c.etc2.ctex"]
 
 [params]
 
-compress/mode=0
+compress/mode=2
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0

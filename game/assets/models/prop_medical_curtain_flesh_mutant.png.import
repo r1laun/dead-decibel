@@ -3,9 +3,11 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://db5fhshgtdqpq"
-path="res://.godot/imported/prop_medical_curtain_flesh_mutant.png-0bf0f7dd03a57719643fa4463a030806.ctex"
+path.s3tc="res://.godot/imported/prop_medical_curtain_flesh_mutant.png-0bf0f7dd03a57719643fa4463a030806.s3tc.ctex"
+path.etc2="res://.godot/imported/prop_medical_curtain_flesh_mutant.png-0bf0f7dd03a57719643fa4463a030806.etc2.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc", "etc2_astc"],
+"vram_texture": true
 }
 generator_parameters={
 "md5": "74be11052dcfb50aa9cace9e574764a9"
@@ -14,11 +16,11 @@ generator_parameters={
 [deps]
 
 source_file="res://assets/models/prop_medical_curtain_flesh_mutant.png"
-dest_files=["res://.godot/imported/prop_medical_curtain_flesh_mutant.png-0bf0f7dd03a57719643fa4463a030806.ctex"]
+dest_files=["res://.godot/imported/prop_medical_curtain_flesh_mutant.png-0bf0f7dd03a57719643fa4463a030806.s3tc.ctex", "res://.godot/imported/prop_medical_curtain_flesh_mutant.png-0bf0f7dd03a57719643fa4463a030806.etc2.ctex"]
 
 [params]
 
-compress/mode=0
+compress/mode=2
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0

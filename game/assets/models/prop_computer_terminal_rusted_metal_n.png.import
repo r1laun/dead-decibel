@@ -3,9 +3,11 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://bt0jc6hf3hh6r"
-path="res://.godot/imported/prop_computer_terminal_rusted_metal_n.png-6bdc59eacff58e320a9be3410b61e268.ctex"
+path.s3tc="res://.godot/imported/prop_computer_terminal_rusted_metal_n.png-6bdc59eacff58e320a9be3410b61e268.s3tc.ctex"
+path.etc2="res://.godot/imported/prop_computer_terminal_rusted_metal_n.png-6bdc59eacff58e320a9be3410b61e268.etc2.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc", "etc2_astc"],
+"vram_texture": true
 }
 generator_parameters={
 "md5": "50271a7b686988b0a1c2e2069cb18c9f"
@@ -14,11 +16,11 @@ generator_parameters={
 [deps]
 
 source_file="res://assets/models/prop_computer_terminal_rusted_metal_n.png"
-dest_files=["res://.godot/imported/prop_computer_terminal_rusted_metal_n.png-6bdc59eacff58e320a9be3410b61e268.ctex"]
+dest_files=["res://.godot/imported/prop_computer_terminal_rusted_metal_n.png-6bdc59eacff58e320a9be3410b61e268.s3tc.ctex", "res://.godot/imported/prop_computer_terminal_rusted_metal_n.png-6bdc59eacff58e320a9be3410b61e268.etc2.ctex"]
 
 [params]
 
-compress/mode=0
+compress/mode=2
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0

@@ -18,7 +18,7 @@ var language_override: String = "en"
 var difficulty: int = DIFF_NORMAL
 var look_sensitivity: float = 1.0
 var master_volume: float = 0.88
-var mic_mode: int = MIC_AUTO
+var mic_mode: int = MIC_OFF
 var gyro_enabled: bool = false
 var haptics_enabled: bool = true
 var reduce_motion: bool = false
@@ -37,7 +37,7 @@ var _env_mic_mode: String = ""
 var _profile_player_id: String = ""
 var _profile_callsign: String = "SURVIVOR"
 var _profile_relay_url: String = "ws://127.0.0.1:8787"
-var _profile_mic_mode: int = 0
+var _profile_mic_mode: int = MIC_OFF
 
 # Legacy compatibility getters if referenced by relay
 var ptt_mode: bool:
@@ -114,7 +114,7 @@ func load_profile() -> void:
 	difficulty = clampi(int(d.get("difficulty", DIFF_NORMAL)), 0, 2)
 	look_sensitivity = clampf(float(d.get("look_sensitivity", 1.0)), 0.25, 3.0)
 	master_volume = clampf(float(d.get("master_volume", 0.88)), 0.05, 1.2)
-	mic_mode = clampi(int(d.get("mic_mode", MIC_AUTO)), 0, 2)
+	mic_mode = clampi(int(d.get("mic_mode", MIC_OFF)), 0, 2)
 	gyro_enabled = bool(d.get("gyro_enabled", false))
 	haptics_enabled = bool(d.get("haptics_enabled", true))
 	reduce_motion = bool(d.get("reduce_motion", false))

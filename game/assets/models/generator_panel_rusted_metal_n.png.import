@@ -3,9 +3,11 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://jfsj0aqgb7ta"
-path="res://.godot/imported/generator_panel_rusted_metal_n.png-0f8d1a642494e0bd2f42bbe3a2d13cf1.ctex"
+path.s3tc="res://.godot/imported/generator_panel_rusted_metal_n.png-0f8d1a642494e0bd2f42bbe3a2d13cf1.s3tc.ctex"
+path.etc2="res://.godot/imported/generator_panel_rusted_metal_n.png-0f8d1a642494e0bd2f42bbe3a2d13cf1.etc2.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc", "etc2_astc"],
+"vram_texture": true
 }
 generator_parameters={
 "md5": "50271a7b686988b0a1c2e2069cb18c9f"
@@ -14,11 +16,11 @@ generator_parameters={
 [deps]
 
 source_file="res://assets/models/generator_panel_rusted_metal_n.png"
-dest_files=["res://.godot/imported/generator_panel_rusted_metal_n.png-0f8d1a642494e0bd2f42bbe3a2d13cf1.ctex"]
+dest_files=["res://.godot/imported/generator_panel_rusted_metal_n.png-0f8d1a642494e0bd2f42bbe3a2d13cf1.s3tc.ctex", "res://.godot/imported/generator_panel_rusted_metal_n.png-0f8d1a642494e0bd2f42bbe3a2d13cf1.etc2.ctex"]
 
 [params]
 
-compress/mode=0
+compress/mode=2
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0

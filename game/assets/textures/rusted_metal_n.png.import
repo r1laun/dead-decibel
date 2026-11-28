@@ -3,19 +3,21 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://dkraffhf7rldo"
-path="res://.godot/imported/rusted_metal_n.png-50d6ab0b8bbbbf7e77f604cbe57c8551.ctex"
+path.s3tc="res://.godot/imported/rusted_metal_n.png-50d6ab0b8bbbbf7e77f604cbe57c8551.s3tc.ctex"
+path.etc2="res://.godot/imported/rusted_metal_n.png-50d6ab0b8bbbbf7e77f604cbe57c8551.etc2.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc", "etc2_astc"],
+"vram_texture": true
 }
 
 [deps]
 
 source_file="res://assets/textures/rusted_metal_n.png"
-dest_files=["res://.godot/imported/rusted_metal_n.png-50d6ab0b8bbbbf7e77f604cbe57c8551.ctex"]
+dest_files=["res://.godot/imported/rusted_metal_n.png-50d6ab0b8bbbbf7e77f604cbe57c8551.s3tc.ctex", "res://.godot/imported/rusted_metal_n.png-50d6ab0b8bbbbf7e77f604cbe57c8551.etc2.ctex"]
 
 [params]
 
-compress/mode=0
+compress/mode=2
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0

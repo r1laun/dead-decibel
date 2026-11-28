@@ -3,9 +3,11 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://dfk8njevymajr"
-path="res://.godot/imported/desk_hide_hazmat_fabric.png-5b6a1c35a5f0c999db2c55ed5e4bd68a.ctex"
+path.s3tc="res://.godot/imported/desk_hide_hazmat_fabric.png-5b6a1c35a5f0c999db2c55ed5e4bd68a.s3tc.ctex"
+path.etc2="res://.godot/imported/desk_hide_hazmat_fabric.png-5b6a1c35a5f0c999db2c55ed5e4bd68a.etc2.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc", "etc2_astc"],
+"vram_texture": true
 }
 generator_parameters={
 "md5": "113ac3814b1fd2daea9abe6dfa6d541e"
@@ -14,11 +16,11 @@ generator_parameters={
 [deps]
 
 source_file="res://assets/models/desk_hide_hazmat_fabric.png"
-dest_files=["res://.godot/imported/desk_hide_hazmat_fabric.png-5b6a1c35a5f0c999db2c55ed5e4bd68a.ctex"]
+dest_files=["res://.godot/imported/desk_hide_hazmat_fabric.png-5b6a1c35a5f0c999db2c55ed5e4bd68a.s3tc.ctex", "res://.godot/imported/desk_hide_hazmat_fabric.png-5b6a1c35a5f0c999db2c55ed5e4bd68a.etc2.ctex"]
 
 [params]
 
-compress/mode=0
+compress/mode=2
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0

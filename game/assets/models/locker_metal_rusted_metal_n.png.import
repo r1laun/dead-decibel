@@ -3,9 +3,11 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://c0gtwly8tvckt"
-path="res://.godot/imported/locker_metal_rusted_metal_n.png-b07f557a4600ee5c893a1762f03e01c0.ctex"
+path.s3tc="res://.godot/imported/locker_metal_rusted_metal_n.png-b07f557a4600ee5c893a1762f03e01c0.s3tc.ctex"
+path.etc2="res://.godot/imported/locker_metal_rusted_metal_n.png-b07f557a4600ee5c893a1762f03e01c0.etc2.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc", "etc2_astc"],
+"vram_texture": true
 }
 generator_parameters={
 "md5": "73ef0313945cb64e0450c3d6a73a31e9"
@@ -14,11 +16,11 @@ generator_parameters={
 [deps]
 
 source_file="res://assets/models/locker_metal_rusted_metal_n.png"
-dest_files=["res://.godot/imported/locker_metal_rusted_metal_n.png-b07f557a4600ee5c893a1762f03e01c0.ctex"]
+dest_files=["res://.godot/imported/locker_metal_rusted_metal_n.png-b07f557a4600ee5c893a1762f03e01c0.s3tc.ctex", "res://.godot/imported/locker_metal_rusted_metal_n.png-b07f557a4600ee5c893a1762f03e01c0.etc2.ctex"]
 
 [params]
 
-compress/mode=0
+compress/mode=2
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0

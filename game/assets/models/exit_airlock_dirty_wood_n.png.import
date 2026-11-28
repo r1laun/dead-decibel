@@ -3,9 +3,11 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://c4p886ex7h5vj"
-path="res://.godot/imported/exit_airlock_dirty_wood_n.png-8b1bd8ab9a01d58b02ac81a4f8342af4.ctex"
+path.s3tc="res://.godot/imported/exit_airlock_dirty_wood_n.png-8b1bd8ab9a01d58b02ac81a4f8342af4.s3tc.ctex"
+path.etc2="res://.godot/imported/exit_airlock_dirty_wood_n.png-8b1bd8ab9a01d58b02ac81a4f8342af4.etc2.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc", "etc2_astc"],
+"vram_texture": true
 }
 generator_parameters={
 "md5": "cf1c398362dd01b2a942c9977ba5a261"
@@ -14,11 +16,11 @@ generator_parameters={
 [deps]
 
 source_file="res://assets/models/exit_airlock_dirty_wood_n.png"
-dest_files=["res://.godot/imported/exit_airlock_dirty_wood_n.png-8b1bd8ab9a01d58b02ac81a4f8342af4.ctex"]
+dest_files=["res://.godot/imported/exit_airlock_dirty_wood_n.png-8b1bd8ab9a01d58b02ac81a4f8342af4.s3tc.ctex", "res://.godot/imported/exit_airlock_dirty_wood_n.png-8b1bd8ab9a01d58b02ac81a4f8342af4.etc2.ctex"]
 
 [params]
 
-compress/mode=0
+compress/mode=2
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0

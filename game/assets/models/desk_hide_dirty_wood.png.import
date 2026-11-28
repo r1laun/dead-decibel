@@ -3,9 +3,11 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://5rlsleo2ab8h"
-path="res://.godot/imported/desk_hide_dirty_wood.png-903946e129714942f74aad93f08195ab.ctex"
+path.s3tc="res://.godot/imported/desk_hide_dirty_wood.png-903946e129714942f74aad93f08195ab.s3tc.ctex"
+path.etc2="res://.godot/imported/desk_hide_dirty_wood.png-903946e129714942f74aad93f08195ab.etc2.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc", "etc2_astc"],
+"vram_texture": true
 }
 generator_parameters={
 "md5": "2bf02daeb91dff084d3f1f55abcb5719"
@@ -14,11 +16,11 @@ generator_parameters={
 [deps]
 
 source_file="res://assets/models/desk_hide_dirty_wood.png"
-dest_files=["res://.godot/imported/desk_hide_dirty_wood.png-903946e129714942f74aad93f08195ab.ctex"]
+dest_files=["res://.godot/imported/desk_hide_dirty_wood.png-903946e129714942f74aad93f08195ab.s3tc.ctex", "res://.godot/imported/desk_hide_dirty_wood.png-903946e129714942f74aad93f08195ab.etc2.ctex"]
 
 [params]
 
-compress/mode=0
+compress/mode=2
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0

@@ -3,9 +3,11 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://vyivpjh4ment"
-path="res://.godot/imported/monster_stalker_flesh_mutant.png-50a72ac5a1d56ea206ab3472ff5144da.ctex"
+path.s3tc="res://.godot/imported/monster_stalker_flesh_mutant.png-50a72ac5a1d56ea206ab3472ff5144da.s3tc.ctex"
+path.etc2="res://.godot/imported/monster_stalker_flesh_mutant.png-50a72ac5a1d56ea206ab3472ff5144da.etc2.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc", "etc2_astc"],
+"vram_texture": true
 }
 generator_parameters={
 "md5": "f63e1173be72d07c25c6f8d3852e7dea"
@@ -14,11 +16,11 @@ generator_parameters={
 [deps]
 
 source_file="res://assets/models/monster_stalker_flesh_mutant.png"
-dest_files=["res://.godot/imported/monster_stalker_flesh_mutant.png-50a72ac5a1d56ea206ab3472ff5144da.ctex"]
+dest_files=["res://.godot/imported/monster_stalker_flesh_mutant.png-50a72ac5a1d56ea206ab3472ff5144da.s3tc.ctex", "res://.godot/imported/monster_stalker_flesh_mutant.png-50a72ac5a1d56ea206ab3472ff5144da.etc2.ctex"]
 
 [params]
 
-compress/mode=0
+compress/mode=2
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0

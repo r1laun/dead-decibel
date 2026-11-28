@@ -3,9 +3,11 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://bpyabr8rcfco0"
-path="res://.godot/imported/survivor_hazmat_hazmat_fabric.png-a93f422c937378b8beb19cee0645d914.ctex"
+path.s3tc="res://.godot/imported/survivor_hazmat_hazmat_fabric.png-a93f422c937378b8beb19cee0645d914.s3tc.ctex"
+path.etc2="res://.godot/imported/survivor_hazmat_hazmat_fabric.png-a93f422c937378b8beb19cee0645d914.etc2.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc", "etc2_astc"],
+"vram_texture": true
 }
 generator_parameters={
 "md5": "1ce8c38681cbd19e30520a55d1ab3fc4"
@@ -14,11 +16,11 @@ generator_parameters={
 [deps]
 
 source_file="res://assets/models/survivor_hazmat_hazmat_fabric.png"
-dest_files=["res://.godot/imported/survivor_hazmat_hazmat_fabric.png-a93f422c937378b8beb19cee0645d914.ctex"]
+dest_files=["res://.godot/imported/survivor_hazmat_hazmat_fabric.png-a93f422c937378b8beb19cee0645d914.s3tc.ctex", "res://.godot/imported/survivor_hazmat_hazmat_fabric.png-a93f422c937378b8beb19cee0645d914.etc2.ctex"]
 
 [params]
 
-compress/mode=0
+compress/mode=2
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0

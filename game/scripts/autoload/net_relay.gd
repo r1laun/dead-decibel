@@ -24,6 +24,7 @@ var _was_in_room_before_drop: bool = false
 var _heartbeat_timer: float = 0.0
 var _connected_url: String = ""
 var _connect_timeout: float = 0.0
+var _app_paused: bool = false
 
 
 static func normalize_relay_url(raw: String) -> String:
@@ -37,6 +38,12 @@ static func normalize_relay_url(raw: String) -> String:
 		s = "ws://" + s.substr(7)
 	elif not (low.begins_with("ws://") or low.begins_with("wss://")):
 		s = "ws://" + s
+	var scheme_end := s.find("://")
+	if scheme_end < 0:
+		return ""
+	var rest := s.substr(scheme_end + 3).strip_edges()
+	if rest.is_empty() or rest.contains(" ") or rest.begins_with("/") or rest.begins_with(":"):
+		return ""
 	return s
 
 
@@ -46,9 +53,11 @@ func _ready() -> void:
 
 func _notification(what: int) -> void:
 	if what == NOTIFICATION_APPLICATION_PAUSED:
+		_app_paused = true
 		if not room_code.is_empty():
 			send_game_event("call_freeze", {"frozen": true})
 	elif what == NOTIFICATION_APPLICATION_RESUMED:
+		_app_paused = false
 		if not room_code.is_empty():
 			send_game_event("call_freeze", {"frozen": false})
 
@@ -230,6 +239,8 @@ func _try_flush_pending() -> void:
 
 
 func _process(delta: float) -> void:
+	if _app_paused:
+		return
 	if ws == null:
 		if not _pending_action.is_empty():
 			# Retry queued create/join/list actions while socket is down (tunnel warm-up, LTE handoff)

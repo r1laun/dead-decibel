@@ -3,9 +3,11 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://cdu4xj0n2xg5u"
-path="res://.godot/imported/prop_corpse_bag_hazmat_fabric_n.png-73c9ec90c7591676c85317cc57fa4d62.ctex"
+path.s3tc="res://.godot/imported/prop_corpse_bag_hazmat_fabric_n.png-73c9ec90c7591676c85317cc57fa4d62.s3tc.ctex"
+path.etc2="res://.godot/imported/prop_corpse_bag_hazmat_fabric_n.png-73c9ec90c7591676c85317cc57fa4d62.etc2.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc", "etc2_astc"],
+"vram_texture": true
 }
 generator_parameters={
 "md5": "5b5b0eab254f341a38b078f767bdf1df"
@@ -14,11 +16,11 @@ generator_parameters={
 [deps]
 
 source_file="res://assets/models/prop_corpse_bag_hazmat_fabric_n.png"
-dest_files=["res://.godot/imported/prop_corpse_bag_hazmat_fabric_n.png-73c9ec90c7591676c85317cc57fa4d62.ctex"]
+dest_files=["res://.godot/imported/prop_corpse_bag_hazmat_fabric_n.png-73c9ec90c7591676c85317cc57fa4d62.s3tc.ctex", "res://.godot/imported/prop_corpse_bag_hazmat_fabric_n.png-73c9ec90c7591676c85317cc57fa4d62.etc2.ctex"]
 
 [params]
 
-compress/mode=0
+compress/mode=2
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0

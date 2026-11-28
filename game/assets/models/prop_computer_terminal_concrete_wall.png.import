@@ -3,9 +3,11 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://dy0l7j01mnh7f"
-path="res://.godot/imported/prop_computer_terminal_concrete_wall.png-362e428160ab8525f786848068a3997e.ctex"
+path.s3tc="res://.godot/imported/prop_computer_terminal_concrete_wall.png-362e428160ab8525f786848068a3997e.s3tc.ctex"
+path.etc2="res://.godot/imported/prop_computer_terminal_concrete_wall.png-362e428160ab8525f786848068a3997e.etc2.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc", "etc2_astc"],
+"vram_texture": true
 }
 generator_parameters={
 "md5": "04d3566c53c66774e690e52ef2f30761"
@@ -14,11 +16,11 @@ generator_parameters={
 [deps]
 
 source_file="res://assets/models/prop_computer_terminal_concrete_wall.png"
-dest_files=["res://.godot/imported/prop_computer_terminal_concrete_wall.png-362e428160ab8525f786848068a3997e.ctex"]
+dest_files=["res://.godot/imported/prop_computer_terminal_concrete_wall.png-362e428160ab8525f786848068a3997e.s3tc.ctex", "res://.godot/imported/prop_computer_terminal_concrete_wall.png-362e428160ab8525f786848068a3997e.etc2.ctex"]
 
 [params]
 
-compress/mode=0
+compress/mode=2
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0

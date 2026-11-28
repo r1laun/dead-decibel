@@ -3,9 +3,11 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://bsy2wgod1yi7"
-path="res://.godot/imported/cabinet_search_rusted_metal.png-1170ede4fe4e54f9641d010d3d9d7561.ctex"
+path.s3tc="res://.godot/imported/cabinet_search_rusted_metal.png-1170ede4fe4e54f9641d010d3d9d7561.s3tc.ctex"
+path.etc2="res://.godot/imported/cabinet_search_rusted_metal.png-1170ede4fe4e54f9641d010d3d9d7561.etc2.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc", "etc2_astc"],
+"vram_texture": true
 }
 generator_parameters={
 "md5": "5bea66507b77c9f1c2eecbdb922c3056"
@@ -14,11 +16,11 @@ generator_parameters={
 [deps]
 
 source_file="res://assets/models/cabinet_search_rusted_metal.png"
-dest_files=["res://.godot/imported/cabinet_search_rusted_metal.png-1170ede4fe4e54f9641d010d3d9d7561.ctex"]
+dest_files=["res://.godot/imported/cabinet_search_rusted_metal.png-1170ede4fe4e54f9641d010d3d9d7561.s3tc.ctex", "res://.godot/imported/cabinet_search_rusted_metal.png-1170ede4fe4e54f9641d010d3d9d7561.etc2.ctex"]
 
 [params]
 
-compress/mode=0
+compress/mode=2
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0

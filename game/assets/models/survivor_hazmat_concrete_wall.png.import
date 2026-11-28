@@ -3,9 +3,11 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://c0lbnepdy5c1a"
-path="res://.godot/imported/survivor_hazmat_concrete_wall.png-cb4fb7c9522da5245765460bd4d86465.ctex"
+path.s3tc="res://.godot/imported/survivor_hazmat_concrete_wall.png-cb4fb7c9522da5245765460bd4d86465.s3tc.ctex"
+path.etc2="res://.godot/imported/survivor_hazmat_concrete_wall.png-cb4fb7c9522da5245765460bd4d86465.etc2.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc", "etc2_astc"],
+"vram_texture": true
 }
 generator_parameters={
 "md5": "c7be0986e7dcb916be58b4c97f4284e9"
@@ -14,11 +16,11 @@ generator_parameters={
 [deps]
 
 source_file="res://assets/models/survivor_hazmat_concrete_wall.png"
-dest_files=["res://.godot/imported/survivor_hazmat_concrete_wall.png-cb4fb7c9522da5245765460bd4d86465.ctex"]
+dest_files=["res://.godot/imported/survivor_hazmat_concrete_wall.png-cb4fb7c9522da5245765460bd4d86465.s3tc.ctex", "res://.godot/imported/survivor_hazmat_concrete_wall.png-cb4fb7c9522da5245765460bd4d86465.etc2.ctex"]
 
 [params]
 
-compress/mode=0
+compress/mode=2
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0

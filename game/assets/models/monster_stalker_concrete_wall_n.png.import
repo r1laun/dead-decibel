@@ -3,9 +3,11 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://hcqvhrotix3j"
-path="res://.godot/imported/monster_stalker_concrete_wall_n.png-816b06f1d385884de3cccdb89ed5a961.ctex"
+path.s3tc="res://.godot/imported/monster_stalker_concrete_wall_n.png-816b06f1d385884de3cccdb89ed5a961.s3tc.ctex"
+path.etc2="res://.godot/imported/monster_stalker_concrete_wall_n.png-816b06f1d385884de3cccdb89ed5a961.etc2.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc", "etc2_astc"],
+"vram_texture": true
 }
 generator_parameters={
 "md5": "94951f651ea843abcac8cb9ca6f60df9"
@@ -14,11 +16,11 @@ generator_parameters={
 [deps]
 
 source_file="res://assets/models/monster_stalker_concrete_wall_n.png"
-dest_files=["res://.godot/imported/monster_stalker_concrete_wall_n.png-816b06f1d385884de3cccdb89ed5a961.ctex"]
+dest_files=["res://.godot/imported/monster_stalker_concrete_wall_n.png-816b06f1d385884de3cccdb89ed5a961.s3tc.ctex", "res://.godot/imported/monster_stalker_concrete_wall_n.png-816b06f1d385884de3cccdb89ed5a961.etc2.ctex"]
 
 [params]
 
-compress/mode=0
+compress/mode=2
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0

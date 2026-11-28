@@ -3,9 +3,11 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://cebc3picray5f"
-path="res://.godot/imported/item_medkit_concrete_wall.png-f8df2235d4f7f1ea8b5a18fe781effb0.ctex"
+path.s3tc="res://.godot/imported/item_medkit_concrete_wall.png-f8df2235d4f7f1ea8b5a18fe781effb0.s3tc.ctex"
+path.etc2="res://.godot/imported/item_medkit_concrete_wall.png-f8df2235d4f7f1ea8b5a18fe781effb0.etc2.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc", "etc2_astc"],
+"vram_texture": true
 }
 generator_parameters={
 "md5": "04d3566c53c66774e690e52ef2f30761"
@@ -14,11 +16,11 @@ generator_parameters={
 [deps]
 
 source_file="res://assets/models/item_medkit_concrete_wall.png"
-dest_files=["res://.godot/imported/item_medkit_concrete_wall.png-f8df2235d4f7f1ea8b5a18fe781effb0.ctex"]
+dest_files=["res://.godot/imported/item_medkit_concrete_wall.png-f8df2235d4f7f1ea8b5a18fe781effb0.s3tc.ctex", "res://.godot/imported/item_medkit_concrete_wall.png-f8df2235d4f7f1ea8b5a18fe781effb0.etc2.ctex"]
 
 [params]
 
-compress/mode=0
+compress/mode=2
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0
